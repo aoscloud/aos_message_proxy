@@ -15,8 +15,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package config provides set of API to provide aos configuration
-
 package filechunker
 
 import (
@@ -27,7 +25,6 @@ import (
 	"path/filepath"
 
 	"github.com/aoscloud/aos_common/aoserrors"
-	pb "github.com/aoscloud/aos_common/api/servicemanager/v3"
 )
 
 /***********************************************************************************************************************
@@ -40,18 +37,43 @@ const chunkSize = 1024 // 1kb
  * Types
  **********************************************************************************************************************/
 
+// ContentInfo is a struct for image content info
 type ContentInfo struct {
-	*pb.ImageContentInfo
-	ImageContent []*pb.ImageContent
+	ImageContentInfo
+	ImageContent []ImageContent
+}
+
+// ImageContent is a struct for image content
+type ImageContent struct {
+	RequestId    uint64
+	RelativePath string
+	PartsCount   uint64
+	Part         uint64
+	Data         []byte
+}
+
+// ImageFile is a struct for image file
+type ImageFile struct {
+	RelativePath string
+	Sha256       []byte
+	Size         uint64
+}
+
+// ImageContentInfo is a struct for image content info
+type ImageContentInfo struct {
+	RequestId  uint64
+	ImageFiles []ImageFile
+	Error      string
 }
 
 /***********************************************************************************************************************
  * Public
  **********************************************************************************************************************/
 
-func ChunkFile(rootDir string, requestID uint64) (ContentInfo, error) {
+// ChunkFile chunks files
+func ChunkFiles(rootDir string, requestID uint64) (ContentInfo, error) {
 	imageContentInfo := ContentInfo{
-		ImageContentInfo: &pb.ImageContentInfo{
+		ImageContentInfo: ImageContentInfo{
 			RequestId: requestID,
 		},
 	}
@@ -70,7 +92,7 @@ func ChunkFile(rootDir string, requestID uint64) (ContentInfo, error) {
 			return err
 		}
 
-		imageContentInfo.ImageFiles = append(imageContentInfo.ImageFiles, &imageFile)
+		imageContentInfo.ImageFiles = append(imageContentInfo.ImageFiles, imageFile)
 		imageContentInfo.ImageContent = append(imageContentInfo.ImageContent, imageContents...)
 
 		return nil
@@ -88,35 +110,35 @@ func ChunkFile(rootDir string, requestID uint64) (ContentInfo, error) {
 
 func prepareImageInfo(
 	rootDir, path string, requestID uint64, info os.FileInfo,
-) (pb.ImageFile, []*pb.ImageContent, error) {
+) (ImageFile, []ImageContent, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return pb.ImageFile{}, nil, aoserrors.Wrap(err)
+		return ImageFile{}, nil, aoserrors.Wrap(err)
 	}
 	defer file.Close()
 
 	hash := sha256.New()
 	if _, err := io.Copy(hash, file); err != nil {
-		return pb.ImageFile{}, nil, aoserrors.Wrap(err)
+		return ImageFile{}, nil, aoserrors.Wrap(err)
 	}
 
 	if _, err := file.Seek(0, 0); err != nil {
-		return pb.ImageFile{}, nil, aoserrors.Wrap(err)
+		return ImageFile{}, nil, aoserrors.Wrap(err)
 	}
 
 	partCounts := uint64(math.Ceil(float64(info.Size()) / float64(chunkSize)))
 
 	relPath, err := filepath.Rel(rootDir, path)
 	if err != nil {
-		return pb.ImageFile{}, nil, aoserrors.Wrap(err)
+		return ImageFile{}, nil, aoserrors.Wrap(err)
 	}
 
 	imageContents, err := getChunkedFileContent(file, requestID, partCounts, relPath)
 	if err != nil {
-		return pb.ImageFile{}, nil, err
+		return ImageFile{}, nil, err
 	}
 
-	return pb.ImageFile{
+	return ImageFile{
 		RelativePath: relPath,
 		Sha256:       hash.Sum(nil),
 		Size:         uint64(info.Size()),
@@ -125,11 +147,11 @@ func prepareImageInfo(
 
 func getChunkedFileContent(
 	file *os.File, requestID uint64, partCounts uint64, relPath string,
-) (imageContents []*pb.ImageContent, err error) {
+) (imageContents []ImageContent, err error) {
 	var chunkNum uint64 = 1
 
 	for {
-		imageContent := &pb.ImageContent{
+		imageContent := ImageContent{
 			RequestId:    requestID,
 			RelativePath: relPath,
 			PartsCount:   partCounts,
