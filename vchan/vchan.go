@@ -21,6 +21,8 @@ package vchan
 // #include "cvchan/vchan_io.h"
 // #ifdef MOCKED
 // #cgo LDFLAGS: -lcrypto
+// #else
+// #cgo LDFLAGS: -lxenvchan
 // #endif
 import "C"
 
