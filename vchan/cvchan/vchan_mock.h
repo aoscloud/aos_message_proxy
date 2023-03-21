@@ -1,6 +1,4 @@
 #include <openssl/sha.h>
-#include <stdlib.h>
-#include <string.h>
 
 struct libxenvchan {};
 
