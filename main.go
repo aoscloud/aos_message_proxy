@@ -27,6 +27,7 @@ import (
 
 	"github.com/aoscloud/aos_common/aoserrors"
 	"github.com/aoscloud/aos_common/utils/cryptutils"
+	"github.com/coreos/go-systemd/daemon"
 	"github.com/coreos/go-systemd/journal"
 	log "github.com/sirupsen/logrus"
 
@@ -154,6 +155,11 @@ func main() {
 		return
 	}
 	defer cm.Close()
+
+	// Notify systemd
+	if _, err = daemon.SdNotify(false, daemon.SdNotifyReady); err != nil {
+		log.Errorf("Can't notify systemd: %s", err)
+	}
 
 	terminateChannel := make(chan os.Signal, 1)
 
