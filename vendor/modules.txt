@@ -23,6 +23,7 @@ github.com/cavaliergopher/grab/v3
 github.com/cavaliergopher/grab/v3/pkg/bps
 # github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e
 ## explicit
+github.com/coreos/go-systemd/daemon
 github.com/coreos/go-systemd/journal
 # github.com/docker/docker v17.12.1-ce+incompatible
 ## explicit
