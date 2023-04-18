@@ -1,4 +1,21 @@
-package vchan_test
+// SPDX-License-Identifier: Apache-2.0
+//
+// Copyright (C) 2023 Renesas Electronics Corporation.
+// Copyright (C) 2023 EPAM Systems, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package vchanmanager_test
 
 import (
 	"bytes"
@@ -14,13 +31,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aoscloud/aos_messageproxy/config"
-	"github.com/aoscloud/aos_messageproxy/vchan"
-
 	"github.com/aoscloud/aos_common/aoserrors"
 	pb "github.com/aoscloud/aos_common/api/servicemanager/v3"
-	"github.com/golang/protobuf/proto"
 	log "github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/proto"
+
+	"github.com/aoscloud/aos_messageproxy/config"
+	"github.com/aoscloud/aos_messageproxy/vchanmanager"
 )
 
 /***********************************************************************************************************************
@@ -39,6 +56,11 @@ type testDownloader struct {
 
 type testUnpacker struct {
 	filePath string
+}
+
+type testVChan struct {
+	send chan []byte
+	recv chan []byte
 }
 
 /***********************************************************************************************************************
@@ -60,10 +82,14 @@ func init() {
  **********************************************************************************************************************/
 
 func TestReadWriteData(t *testing.T) {
-	vch, err := vchan.New(&config.Config{
+	tVchan := &testVChan{
+		send: make(chan []byte, 1),
+		recv: make(chan []byte, 1),
+	}
+	vch, err := vchanmanager.New(&config.Config{
 		XSPath: "domain/path",
 		Domain: 0,
-	}, &testDownloader{}, nil)
+	}, &testDownloader{}, nil, tVchan)
 	if err != nil {
 		t.Errorf("Can't create a new communication manager: %v", err)
 	}
@@ -88,6 +114,22 @@ func TestReadWriteData(t *testing.T) {
 			vch.GetSendingChannel() <- tCase.data
 
 			select {
+			case recievedData := <-tVchan.send:
+				if string(recievedData) != string(tCase.data) {
+					t.Errorf("Expected data: %s, recieved data: %s", tCase.data, recievedData)
+				}
+
+			case <-time.After(1 * time.Second):
+				t.Errorf("Timeout")
+			}
+		})
+	}
+
+	for _, tCase := range tCases {
+		t.Run(tCase.name, func(t *testing.T) {
+			tVchan.recv <- tCase.data
+
+			select {
 			case recievedData := <-vch.GetReceivingChannel():
 				if string(recievedData) != string(tCase.data) {
 					t.Errorf("Expected data: %s, recieved data: %s", tCase.data, recievedData)
@@ -101,6 +143,11 @@ func TestReadWriteData(t *testing.T) {
 }
 
 func TestDownload(t *testing.T) {
+	tVchan := &testVChan{
+		send: make(chan []byte, 1),
+		recv: make(chan []byte, 1),
+	}
+
 	tmpDir, err := ioutil.TempDir("", "vchan_")
 	if err != nil {
 		t.Fatalf("Can't create a temp dir: %v", err)
@@ -113,14 +160,14 @@ func TestDownload(t *testing.T) {
 		t.Fatalf("Can't generate file: %v", err)
 	}
 
-	vch, err := vchan.New(&config.Config{
+	vch, err := vchanmanager.New(&config.Config{
 		XSPath: "domain/path",
 		Domain: 0,
 	}, &testDownloader{
 		downloadedFile: fileName,
 	}, &testUnpacker{
 		filePath: tmpDir,
-	})
+	}, tVchan)
 	if err != nil {
 		t.Errorf("Can't create a new communication manager: %v", err)
 	}
@@ -171,7 +218,7 @@ func TestDownload(t *testing.T) {
 		t.Fatalf("Can't marshal data: %v", err)
 	}
 
-	vch.GetSendingChannel() <- imageContentRequestRaw
+	tVchan.recv <- imageContentRequestRaw
 
 	tCases := []struct {
 		name string
@@ -213,7 +260,7 @@ func TestDownload(t *testing.T) {
 	for _, tCase := range tCases {
 		t.Run(tCase.name, func(t *testing.T) {
 			select {
-			case recievedData := <-vch.GetReceivingChannel():
+			case recievedData := <-tVchan.send:
 				data, err := proto.Marshal(tCase.data)
 				if err != nil {
 					t.Errorf("Can't marshal data: %v", err)
@@ -233,6 +280,23 @@ func TestDownload(t *testing.T) {
 /***********************************************************************************************************************
  * Interfaces
  **********************************************************************************************************************/
+
+func (v *testVChan) Init(domain int, xsPath string) error {
+	return nil
+}
+
+func (v *testVChan) Read(ctx context.Context) ([]byte, error) {
+	return <-v.recv, nil
+}
+
+func (v *testVChan) Write(data []byte) error {
+	v.send <- data
+
+	return nil
+}
+
+func (v *testVChan) Close() {
+}
 
 func (td *testDownloader) Download(
 	ctx context.Context, url string,
