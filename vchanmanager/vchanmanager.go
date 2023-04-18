@@ -15,26 +15,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package vchan
-
-// #cgo CFLAGS: -I./include
-// #include "cvchan/vchan_io.h"
-// #ifdef MOCKED
-// #cgo LDFLAGS: -lcrypto
-// #else
-// #cgo LDFLAGS: -lxenvchan
-// #endif
-import "C"
+package vchanmanager
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"fmt"
+	"errors"
 	"os"
 	"sync"
 	"time"
-	"unsafe"
 
 	"github.com/aoscloud/aos_common/aoserrors"
 	pb "github.com/aoscloud/aos_common/api/servicemanager/v3"
@@ -52,7 +40,6 @@ import (
 const (
 	channelSize      = 20
 	reconnectTimeout = 10 * time.Second
-	headerSize       = C.size_t(unsafe.Sizeof(C.struct_VchanMessageHeader{}))
 )
 
 /***********************************************************************************************************************
@@ -69,11 +56,17 @@ type Unpacker interface {
 	Unpack(archivePath string, contentType string) (string, error)
 }
 
-// Vchan vchan instance.
-type Vchan struct {
-	sync.Mutex
+// VChanItf interface for vchan.
+type VChanItf interface {
+	Init(domain int, xsPath string) error
+	Read(ctx context.Context) ([]byte, error)
+	Write(data []byte) error
+	Close()
+}
 
-	vchan                *C.struct_libxenvchan
+// Vchan vchan instance.
+type VChanManager struct {
+	vchan                VChanItf
 	recvChan             chan []byte
 	sendChan             chan []byte
 	ctx                  context.Context
@@ -89,48 +82,54 @@ type Vchan struct {
  * Vars
  **********************************************************************************************************************/
 
-var errUnexpectedNumberBytes = fmt.Errorf("unexpected number of bytes")
+var (
+	ErrContextCanceled = errors.New("operation canceled due to context cancellation")
+	ErrChecksumFailed  = errors.New("checksum validation failed")
+)
 
 /***********************************************************************************************************************
  * Public
  **********************************************************************************************************************/
 
 // New creates new vchan instance.
-func New(cfg *config.Config, downloadManager Downloader, unpackerManager Unpacker) (*Vchan, error) {
-	vchan := &Vchan{
+func New(
+	cfg *config.Config, downloadManager Downloader, unpackerManager Unpacker, vchan VChanItf,
+) (*VChanManager, error) {
+	v := &VChanManager{
 		recvChan:             make(chan []byte, channelSize),
 		sendChan:             make(chan []byte, channelSize),
 		connectionLostNotify: make(chan struct{}, 1),
 		cfg:                  cfg,
+		vchan:                vchan,
 		downloadManager:      downloadManager,
 		unpackerManager:      unpackerManager,
 	}
 
-	vchan.ctx, vchan.cancel = context.WithCancel(context.Background())
+	v.ctx, v.cancel = context.WithCancel(context.Background())
 
-	go vchan.run()
+	go v.run()
 
-	return vchan, nil
+	return v, nil
 }
 
 // GetReceivingChannel returns channel for receiving data.
-func (v *Vchan) GetReceivingChannel() <-chan []byte {
+func (v *VChanManager) GetReceivingChannel() <-chan []byte {
 	return v.recvChan
 }
 
 // GetSendingChannel returns channel for sending data.
-func (v *Vchan) GetSendingChannel() chan<- []byte {
+func (v *VChanManager) GetSendingChannel() chan<- []byte {
 	return v.sendChan
 }
 
 // Close closes vchan.
-func (v *Vchan) Close() {
+func (v *VChanManager) Close() {
 	if v.cancel != nil {
 		v.cancel()
 	}
 
 	if v.vchan != nil {
-		C.libxenvchan_close(v.vchan)
+		v.vchan.Close()
 	}
 
 	close(v.recvChan)
@@ -141,9 +140,9 @@ func (v *Vchan) Close() {
  * Private
  **********************************************************************************************************************/
 
-func (v *Vchan) run() {
+func (v *VChanManager) run() {
 	for {
-		err := v.serverInit()
+		err := v.vchan.Init(v.cfg.Domain, v.cfg.XSPath)
 		if err == nil {
 			v.waitConnection.Add(2)
 			go v.reader()
@@ -164,13 +163,13 @@ func (v *Vchan) run() {
 	}
 }
 
-func (v *Vchan) writer() {
+func (v *VChanManager) writer() {
 	defer v.waitConnection.Done()
 
 	for {
 		select {
 		case data := <-v.sendChan:
-			if err := v.write(data); err != nil {
+			if err := v.vchan.Write(data); err != nil {
 				log.Errorf("Failed write to vchan: %v", aoserrors.Wrap(err))
 
 				return
@@ -185,22 +184,7 @@ func (v *Vchan) writer() {
 	}
 }
 
-func (v *Vchan) write(data []byte) error {
-	v.Lock()
-	defer v.Unlock()
-
-	if err := v.writeVchan(prepareHeader(data)); err != nil {
-		return err
-	}
-
-	if err := v.writeVchan(data); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (v *Vchan) reader() {
+func (v *VChanManager) reader() {
 	defer v.waitConnection.Done()
 	defer func() { v.connectionLostNotify <- struct{}{} }()
 
@@ -210,28 +194,19 @@ func (v *Vchan) reader() {
 			return
 
 		default:
-			buffer, err := v.readVchan(headerSize)
+			buffer, err := v.vchan.Read(v.ctx)
 			if err != nil {
+				if errors.Is(err, ErrContextCanceled) {
+					return
+				}
+
 				log.Errorf("Failed read from vchan: %v", err)
 
-				return
-			}
-
-			header := (*C.struct_VchanMessageHeader)(unsafe.Pointer(&buffer[0]))
-
-			if buffer, err = v.readVchan(C.size_t(header.dataSize)); err != nil {
-				log.Errorf("Failed read from vchan: %v", err)
+				if errors.Is(err, ErrChecksumFailed) {
+					continue
+				}
 
 				return
-			}
-
-			recievedSha256 := C.GoBytes(unsafe.Pointer(&header.sha256[0]), C.int(sha256.Size))
-
-			sha256Payload := sha256.Sum256(buffer)
-			if !bytes.Equal(sha256Payload[:], recievedSha256) {
-				log.Errorf("Error: sha256 checksum validation failed")
-
-				continue
 			}
 
 			if request, ok := v.isImageContentRequest(buffer); ok {
@@ -255,7 +230,7 @@ func (v *Vchan) reader() {
 	}
 }
 
-func (v *Vchan) download(url string, requestId uint64, contentType string) {
+func (v *VChanManager) download(url string, requestId uint64, contentType string) {
 	fileName, err := v.downloadManager.Download(v.ctx, url)
 	if err != nil {
 		log.Errorf("Failed to download image content: %v", aoserrors.Wrap(err))
@@ -285,7 +260,7 @@ func (v *Vchan) download(url string, requestId uint64, contentType string) {
 	}
 }
 
-func (v *Vchan) sendImageContentInfo(imageContentInfo *pb.ImageContentInfo, imagesContent []*pb.ImageContent) error {
+func (v *VChanManager) sendImageContentInfo(imageContentInfo *pb.ImageContentInfo, imagesContent []*pb.ImageContent) error {
 	if err := v.sendImageContent(&pb.SMIncomingMessages{SMIncomingMessage: &pb.SMIncomingMessages_ImageContentInfo{
 		ImageContentInfo: imageContentInfo,
 	}}); err != nil {
@@ -303,7 +278,7 @@ func (v *Vchan) sendImageContentInfo(imageContentInfo *pb.ImageContentInfo, imag
 	return nil
 }
 
-func (v *Vchan) getImageContent(
+func (v *VChanManager) getImageContent(
 	fileName, contentType string, requestId uint64,
 ) (*pb.ImageContentInfo, []*pb.ImageContent, error) {
 	defer func() {
@@ -363,34 +338,7 @@ func convertImageContentToPb(content []filechunker.ImageContent) []*pb.ImageCont
 	return imageContent
 }
 
-func (v *Vchan) serverInit() (err error) {
-	cstr := C.CString(v.cfg.XSPath)
-	defer C.free(unsafe.Pointer(cstr))
-
-	// To address Golang's inability to access bitfields in C structures,
-	// it is necessary to use server_init() instead of libxenvchan_server_init().
-
-	v.vchan, err = C.server_init(C.int(v.cfg.Domain), cstr)
-	if v.vchan == nil {
-		return aoserrors.Errorf("libxenvchan_server_init failed: %v", err)
-	}
-
-	return nil
-}
-
-func prepareHeader(data []byte) []byte {
-	header := C.struct_VchanMessageHeader{
-		dataSize: C.uint32_t(len(data)),
-	}
-
-	sha256Payload := sha256.Sum256(data)
-
-	C.memcpy(unsafe.Pointer(&header.sha256[0]), unsafe.Pointer(&sha256Payload[0]), C.size_t(len(sha256Payload)))
-
-	return (*[headerSize]byte)(unsafe.Pointer(&header))[:]
-}
-
-func (v *Vchan) sendFailedImageContentResponse(requestID uint64, err error) error {
+func (v *VChanManager) sendFailedImageContentResponse(requestID uint64, err error) error {
 	imageContentInfo := &pb.SMIncomingMessages{SMIncomingMessage: &pb.SMIncomingMessages_ImageContentInfo{
 		ImageContentInfo: &pb.ImageContentInfo{
 			RequestId: requestID,
@@ -403,19 +351,19 @@ func (v *Vchan) sendFailedImageContentResponse(requestID uint64, err error) erro
 		return aoserrors.Wrap(err)
 	}
 
-	return v.write(data)
+	return v.vchan.Write(data)
 }
 
-func (v *Vchan) sendImageContent(imageMessage *pb.SMIncomingMessages) error {
+func (v *VChanManager) sendImageContent(imageMessage *pb.SMIncomingMessages) error {
 	data, err := proto.Marshal(imageMessage)
 	if err != nil {
 		return aoserrors.Wrap(err)
 	}
 
-	return v.write(data)
+	return v.vchan.Write(data)
 }
 
-func (v *Vchan) isImageContentRequest(data []byte) (*pb.SMOutgoingMessages_ImageContentRequest, bool) {
+func (v *VChanManager) isImageContentRequest(data []byte) (*pb.SMOutgoingMessages_ImageContentRequest, bool) {
 	outgoingMessage := &pb.SMOutgoingMessages{}
 
 	err := proto.Unmarshal(data, outgoingMessage)
@@ -428,32 +376,4 @@ func (v *Vchan) isImageContentRequest(data []byte) (*pb.SMOutgoingMessages_Image
 	imageRequest, ok := outgoingMessage.GetSMOutgoingMessage().(*pb.SMOutgoingMessages_ImageContentRequest)
 
 	return imageRequest, ok
-}
-
-func (v *Vchan) readVchan(buffSize C.size_t) ([]byte, error) {
-	buffer := make([]byte, buffSize)
-
-	n, errno := C.libxenvchan_read_all(v.vchan, unsafe.Pointer(&buffer[0]), buffSize)
-	if n < 0 {
-		return nil, aoserrors.Errorf("libxenvchan_read_all failed: %v", errno)
-	}
-
-	if n != C.int(buffSize) {
-		return nil, aoserrors.Wrap(errUnexpectedNumberBytes)
-	}
-
-	return buffer, nil
-}
-
-func (v *Vchan) writeVchan(buffer []byte) error {
-	n, errno := C.libxenvchan_write_all(v.vchan, unsafe.Pointer(&buffer[0]), C.size_t(len(buffer)))
-	if n < 0 {
-		return aoserrors.Errorf("libxenvchan_write_all failed: %v", errno)
-	}
-
-	if n != C.int(len(buffer)) {
-		return aoserrors.Wrap(errUnexpectedNumberBytes)
-	}
-
-	return nil
 }
