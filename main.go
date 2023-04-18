@@ -36,7 +36,7 @@ import (
 	"github.com/aoscloud/aos_messageproxy/downloader"
 	"github.com/aoscloud/aos_messageproxy/iamclient"
 	"github.com/aoscloud/aos_messageproxy/imageunpacker"
-	"github.com/aoscloud/aos_messageproxy/vchan"
+	"github.com/aoscloud/aos_messageproxy/vchanmanager"
 )
 
 /***********************************************************************************************************************
@@ -124,7 +124,7 @@ func main() {
 		return
 	}
 
-	vch, err := vchan.New(config, downloadmanager, unpackmanager)
+	vch, err := vchanmanager.New(config, downloadmanager, unpackmanager, vchanmanager.NewVChan())
 	if err != nil {
 		log.Fatalf("Can't create vchan: %s", err)
 
