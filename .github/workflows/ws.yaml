@@ -1,0 +1,35 @@
+name: MEND_CHECK
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  ws_check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code checkout
+        uses: actions/checkout@v2
+
+      - name: mend_check
+        env:
+          WSS_API_KEY: ${{ secrets.WSS_API_KEY }}
+          WSS_PROXY_TOKEN: ${{ secrets.WSS_PROXY_TOKEN }}
+          WSS_USER_KEY: ${{ secrets.WSS_USER_KEY }}
+        run: |
+          echo Downloading WhiteSource Unified Agent
+          curl -LJO https://unified-agent.s3.amazonaws.com/wss-unified-agent.jar
+          if [[ "$(curl -sL https://unified-agent.s3.amazonaws.com/wss-unified-agent.jar.sha256)" != "$(sha256sum wss-unified-agent.jar)" ]] ; then
+            echo "Integrity Check Failed"
+          else
+            java -jar wss-unified-agent.jar  \
+             -apiKey $WSS_API_KEY \
+             -projectToken $WSS_PROXY_TOKEN \
+             -userKey $WSS_USER_KEY \
+             -c ./ci/wss-proxy.conf -d ./ \
+             -scanComment $GITHUB_SHA
+          fi
