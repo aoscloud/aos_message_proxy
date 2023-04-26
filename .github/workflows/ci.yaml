@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - feature_*
+  pull_request:
+    branches:
+      - main
+      - develop
+      - feature_*
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code checkout
+        uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.18.2
+
+      - name: Build
+        run: go build -tags=test
+
+      - name: Test
+        run: |
+          sudo apt-get install -y wondershaper
+          sudo env "PATH=$PATH" go test -tags=test -v ./... -failfast -coverprofile=coverage.out -covermode=atomic
+          sudo chmod 666 coverage.out
+
+      - name: Code coverage
+        run: bash <(curl -s https://codecov.io/bash)
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: v1.47.3
