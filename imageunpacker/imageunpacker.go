@@ -58,7 +58,6 @@ func New(cfg *config.Config) (*ImageUnpacker, error) {
 
 // Unpack unpacks image content.
 func (unpacker *ImageUnpacker) Unpack(archivePath string, contentType string) (string, error) {
-	// TODO: implement handling content type
 	unpackerFunc, ok := unpacker.contentUnpack[contentType]
 	if !ok {
 		return "", aoserrors.Errorf("Unsupported content type: %s", contentType)

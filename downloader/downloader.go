@@ -19,7 +19,6 @@ package downloader
 
 import (
 	"context"
-	"errors"
 	"os"
 	"time"
 
@@ -99,7 +98,7 @@ func (downloader *Downloader) process(ctx context.Context, url string) (fileName
 			log.WithFields(log.Fields{"URL": url}).Debugf("Retry download in %s", delay)
 		},
 		0, downloader.config.RetryDelay.Duration, downloader.config.MaxRetryDelay.Duration); err != nil {
-		return fileName, errors.New("can't download file from source")
+		return fileName, aoserrors.New("can't download file from source")
 	}
 
 	return fileName, nil

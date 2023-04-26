@@ -37,31 +37,31 @@ const chunkSize = 1024 // 1kb
  * Types
  **********************************************************************************************************************/
 
-// ContentInfo is a struct for image content info
+// ContentInfo is a struct for image content info.
 type ContentInfo struct {
 	ImageContentInfo
 	ImageContent []ImageContent
 }
 
-// ImageContent is a struct for image content
+// ImageContent is a struct for image content.
 type ImageContent struct {
-	RequestId    uint64
+	RequestID    uint64
 	RelativePath string
 	PartsCount   uint64
 	Part         uint64
 	Data         []byte
 }
 
-// ImageFile is a struct for image file
+// ImageFile is a struct for image file.
 type ImageFile struct {
 	RelativePath string
 	Sha256       []byte
 	Size         uint64
 }
 
-// ImageContentInfo is a struct for image content info
+// ImageContentInfo is a struct for image content info.
 type ImageContentInfo struct {
-	RequestId  uint64
+	RequestID  uint64
 	ImageFiles []ImageFile
 	Error      string
 }
@@ -70,11 +70,11 @@ type ImageContentInfo struct {
  * Public
  **********************************************************************************************************************/
 
-// ChunkFile chunks files
+// ChunkFile chunks files.
 func ChunkFiles(rootDir string, requestID uint64) (ContentInfo, error) {
 	imageContentInfo := ContentInfo{
 		ImageContentInfo: ImageContentInfo{
-			RequestId: requestID,
+			RequestID: requestID,
 		},
 	}
 
@@ -98,7 +98,7 @@ func ChunkFiles(rootDir string, requestID uint64) (ContentInfo, error) {
 		return nil
 	})
 	if err != nil {
-		return imageContentInfo, err
+		return imageContentInfo, aoserrors.Wrap(err)
 	}
 
 	return imageContentInfo, nil
@@ -152,7 +152,7 @@ func getChunkedFileContent(
 
 	for {
 		imageContent := ImageContent{
-			RequestId:    requestID,
+			RequestID:    requestID,
 			RelativePath: relPath,
 			PartsCount:   partCounts,
 			Part:         chunkNum,
