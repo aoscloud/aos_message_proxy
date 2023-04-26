@@ -52,7 +52,7 @@ static int fdIsSet (int sysfd, void *set) {
     return FD_ISSET(sysfd, (fd_set*)set);
 }
 */
-import "C"
+import "C" // nolint:typecheck
 
 /***********************************************************************************************************************
  * Consts

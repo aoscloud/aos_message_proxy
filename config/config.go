@@ -44,8 +44,8 @@ type Config struct {
 	WorkingDir         string     `json:"workingDir"`
 	XSPath             string     `json:"xsPath"`
 	Domain             int        `json:"domain"`
-	IAMPublicServerURL string     `json:"iamPublicServerURL"`
-	CMServerURL        string     `json:"cmServerURL"`
+	IAMPublicServerURL string     `json:"iamPublicServerUrl"`
+	CMServerURL        string     `json:"cmServerUrl"`
 	CertStorage        string     `json:"certStorage"`
 	CACert             string     `json:"caCert"`
 	ImageStoreDir      string     `json:"imageStoreDir"`
@@ -65,9 +65,9 @@ func New(fileName string) (*Config, error) {
 
 	cfg := &Config{
 		Downloader: Downloader{
-			MaxConcurrentDownloads: 4,
+			MaxConcurrentDownloads: 4, // nolint:gomnd
 			RetryDelay:             aostypes.Duration{Duration: 1 * time.Minute},
-			MaxRetryDelay:          aostypes.Duration{Duration: 30 * time.Minute},
+			MaxRetryDelay:          aostypes.Duration{Duration: 30 * time.Minute}, // nolint:gomnd
 		},
 	}
 

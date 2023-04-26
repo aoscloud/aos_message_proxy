@@ -69,7 +69,6 @@ type VChanManager struct {
 	vchan                VChanItf
 	recvChan             chan []byte
 	sendChan             chan []byte
-	ctx                  context.Context
 	cancel               context.CancelFunc
 	waitConnection       sync.WaitGroup
 	connectionLostNotify chan struct{}
@@ -105,9 +104,11 @@ func New(
 		unpackerManager:      unpackerManager,
 	}
 
-	v.ctx, v.cancel = context.WithCancel(context.Background())
+	var ctx context.Context
 
-	go v.run()
+	ctx, v.cancel = context.WithCancel(context.Background())
+
+	go v.run(ctx)
 
 	return v, nil
 }
@@ -140,13 +141,15 @@ func (v *VChanManager) Close() {
  * Private
  **********************************************************************************************************************/
 
-func (v *VChanManager) run() {
+func (v *VChanManager) run(ctx context.Context) {
 	for {
 		err := v.vchan.Init(v.cfg.Domain, v.cfg.XSPath)
 		if err == nil {
-			v.waitConnection.Add(2)
-			go v.reader()
-			go v.writer()
+			v.waitConnection.Add(2) // nolint:gomnd
+
+			go v.reader(ctx)
+			go v.writer(ctx)
+
 			v.waitConnection.Wait()
 		} else {
 			log.Errorf("Failed connect to vchan: %v", err)
@@ -155,7 +158,7 @@ func (v *VChanManager) run() {
 		log.Debugf("Reconnect to vchan in %v...", reconnectTimeout)
 
 		select {
-		case <-v.ctx.Done():
+		case <-ctx.Done():
 			return
 
 		case <-time.After(reconnectTimeout):
@@ -163,7 +166,7 @@ func (v *VChanManager) run() {
 	}
 }
 
-func (v *VChanManager) writer() {
+func (v *VChanManager) writer(ctx context.Context) {
 	defer v.waitConnection.Done()
 
 	for {
@@ -178,23 +181,23 @@ func (v *VChanManager) writer() {
 		case <-v.connectionLostNotify:
 			return
 
-		case <-v.ctx.Done():
+		case <-ctx.Done():
 			return
 		}
 	}
 }
 
-func (v *VChanManager) reader() {
+func (v *VChanManager) reader(ctx context.Context) {
 	defer v.waitConnection.Done()
 	defer func() { v.connectionLostNotify <- struct{}{} }()
 
 	for {
 		select {
-		case <-v.ctx.Done():
+		case <-ctx.Done():
 			return
 
 		default:
-			buffer, err := v.vchan.Read(v.ctx)
+			buffer, err := v.vchan.Read(ctx)
 			if err != nil {
 				if errors.Is(err, ErrContextCanceled) {
 					return
@@ -213,7 +216,7 @@ func (v *VChanManager) reader() {
 				go func() {
 					v.download(
 						request.ImageContentRequest.Url, request.ImageContentRequest.RequestId,
-						request.ImageContentRequest.ContentType)
+						request.ImageContentRequest.ContentType, ctx)
 				}()
 
 				continue
@@ -221,7 +224,7 @@ func (v *VChanManager) reader() {
 
 			// This is necessary to avoid writing to a closed channel
 			select {
-			case <-v.ctx.Done():
+			case <-ctx.Done():
 				return
 			default:
 				v.recvChan <- buffer[:]
@@ -230,12 +233,12 @@ func (v *VChanManager) reader() {
 	}
 }
 
-func (v *VChanManager) download(url string, requestId uint64, contentType string) {
-	fileName, err := v.downloadManager.Download(v.ctx, url)
+func (v *VChanManager) download(url string, requestID uint64, contentType string, ctx context.Context) {
+	fileName, err := v.downloadManager.Download(ctx, url)
 	if err != nil {
 		log.Errorf("Failed to download image content: %v", aoserrors.Wrap(err))
 
-		if err := v.sendFailedImageContentResponse(requestId, err); err != nil {
+		if err := v.sendFailedImageContentResponse(requestID, err); err != nil {
 			log.Errorf("Failed to send failed image content response: %v", err)
 		}
 
@@ -244,11 +247,11 @@ func (v *VChanManager) download(url string, requestId uint64, contentType string
 
 	log.Debugf("Downloaded file: %s", fileName)
 
-	imageContentInfo, imagesContent, err := v.getImageContent(fileName, contentType, requestId)
+	imageContentInfo, imagesContent, err := v.getImageContent(fileName, contentType, requestID)
 	if err != nil {
 		log.Errorf("Failed chunk file: %v", err)
 
-		if err := v.sendFailedImageContentResponse(requestId, err); err != nil {
+		if err := v.sendFailedImageContentResponse(requestID, err); err != nil {
 			log.Errorf("Failed to send failed image content response: %v", err)
 		}
 
@@ -260,7 +263,9 @@ func (v *VChanManager) download(url string, requestId uint64, contentType string
 	}
 }
 
-func (v *VChanManager) sendImageContentInfo(imageContentInfo *pb.ImageContentInfo, imagesContent []*pb.ImageContent) error {
+func (v *VChanManager) sendImageContentInfo(
+	imageContentInfo *pb.ImageContentInfo, imagesContent []*pb.ImageContent,
+) error {
 	if err := v.sendImageContent(&pb.SMIncomingMessages{SMIncomingMessage: &pb.SMIncomingMessages_ImageContentInfo{
 		ImageContentInfo: imageContentInfo,
 	}}); err != nil {
@@ -279,7 +284,7 @@ func (v *VChanManager) sendImageContentInfo(imageContentInfo *pb.ImageContentInf
 }
 
 func (v *VChanManager) getImageContent(
-	fileName, contentType string, requestId uint64,
+	fileName, contentType string, requestID uint64,
 ) (*pb.ImageContentInfo, []*pb.ImageContent, error) {
 	defer func() {
 		if err := os.Remove(fileName); err != nil {
@@ -294,45 +299,43 @@ func (v *VChanManager) getImageContent(
 
 	log.Debugf("Unpacked file: %s", unarchiveDir)
 
-	contentInfo, err := filechunker.ChunkFiles(unarchiveDir, requestId)
+	contentInfo, err := filechunker.ChunkFiles(unarchiveDir, requestID)
 	if err != nil {
 		return nil, nil, aoserrors.Wrap(err)
 	}
 
 	return &pb.ImageContentInfo{
-		RequestId:  contentInfo.RequestId,
+		RequestId:  contentInfo.RequestID,
 		ImageFiles: convertImageFilesToPb(contentInfo.ImageFiles),
 		Error:      contentInfo.Error,
 	}, convertImageContentToPb(contentInfo.ImageContent), nil
 }
 
 func convertImageFilesToPb(files []filechunker.ImageFile) []*pb.ImageFile {
-	var imageFiles []*pb.ImageFile
+	imageFiles := make([]*pb.ImageFile, len(files))
 
-	for _, file := range files {
-		imageFile := &pb.ImageFile{
+	for i, file := range files {
+		imageFiles[i] = &pb.ImageFile{
 			RelativePath: file.RelativePath,
 			Sha256:       file.Sha256[:],
 			Size:         file.Size,
 		}
-
-		imageFiles = append(imageFiles, imageFile)
 	}
 
 	return imageFiles
 }
 
 func convertImageContentToPb(content []filechunker.ImageContent) []*pb.ImageContent {
-	var imageContent []*pb.ImageContent
+	imageContent := make([]*pb.ImageContent, len(content))
 
-	for _, c := range content {
-		imageContent = append(imageContent, &pb.ImageContent{
-			RequestId:    c.RequestId,
+	for i, c := range content {
+		imageContent[i] = &pb.ImageContent{
+			RequestId:    c.RequestID,
 			RelativePath: c.RelativePath,
 			PartsCount:   c.PartsCount,
 			Part:         c.Part,
 			Data:         c.Data[:],
-		})
+		}
 	}
 
 	return imageContent
@@ -351,7 +354,7 @@ func (v *VChanManager) sendFailedImageContentResponse(requestID uint64, err erro
 		return aoserrors.Wrap(err)
 	}
 
-	return v.vchan.Write(data)
+	return aoserrors.Wrap(v.vchan.Write(data))
 }
 
 func (v *VChanManager) sendImageContent(imageMessage *pb.SMIncomingMessages) error {
@@ -360,7 +363,7 @@ func (v *VChanManager) sendImageContent(imageMessage *pb.SMIncomingMessages) err
 		return aoserrors.Wrap(err)
 	}
 
-	return v.vchan.Write(data)
+	return aoserrors.Wrap(v.vchan.Write(data))
 }
 
 func (v *VChanManager) isImageContentRequest(data []byte) (*pb.SMOutgoingMessages_ImageContentRequest, bool) {

@@ -55,7 +55,6 @@ const (
 type CMClient struct {
 	connection            *grpc.ClientConn
 	stream                pb.SMService_RegisterSMClient
-	ctx                   context.Context
 	cancel                context.CancelFunc
 	sendChan              chan<- []byte
 	recvChan              <-chan []byte
@@ -113,9 +112,9 @@ func New(
 
 	log.Debug("Connected to CM")
 
-	client.ctx, client.cancel = context.WithCancel(context.Background())
+	ctx, client.cancel = context.WithCancel(context.Background())
 
-	go client.run()
+	go client.run(ctx)
 
 	return client, nil
 }
@@ -139,18 +138,20 @@ func (client *CMClient) Close() {
  * Private
  **********************************************************************************************************************/
 
-func (client *CMClient) run() {
+func (client *CMClient) run(ctx context.Context) {
 	for {
 		select {
-		case <-client.ctx.Done():
+		case <-ctx.Done():
 			return
 
 		default:
 			err := client.registerStream()
 			if err == nil {
-				client.waitConnection.Add(2)
-				go client.receiveOutgoingMessages()
+				client.waitConnection.Add(2) // nolint:gomnd
+
+				go client.receiveOutgoingMessages(ctx)
 				go client.receiveIncomingMessages()
+
 				client.waitConnection.Wait()
 			} else {
 				log.Errorf("Failed to register stream: %v", err)
@@ -159,7 +160,7 @@ func (client *CMClient) run() {
 			log.Debugf("Reconnect to CM in %v...", cmReconnectTimeout)
 
 			select {
-			case <-client.ctx.Done():
+			case <-ctx.Done():
 				log.Debug("CM client is closed")
 
 				return
@@ -207,7 +208,7 @@ func (client *CMClient) processMessages() (err error) {
 	}
 }
 
-func (client *CMClient) receiveOutgoingMessages() {
+func (client *CMClient) receiveOutgoingMessages(ctx context.Context) {
 	defer client.waitConnection.Done()
 
 	for _, outgoingMessage := range client.savedOutgoingMessages {
@@ -223,7 +224,7 @@ func (client *CMClient) receiveOutgoingMessages() {
 
 	for {
 		select {
-		case <-client.ctx.Done():
+		case <-ctx.Done():
 			return
 
 		case <-client.connectionLostNotify:
