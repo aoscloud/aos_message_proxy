@@ -99,23 +99,6 @@ func (unpacker *ImageUnpacker) serviceUnpack(archivePath string) (string, error)
 		return "", err
 	}
 
-	imageParts, err := getImageParts(imagePath)
-	if err != nil {
-		return "", err
-	}
-
-	if err := os.Rename(imageParts.ImageConfigPath, filepath.Join(imagePath, "image.json")); err != nil {
-		return "", aoserrors.Wrap(err)
-	}
-
-	if err := os.Rename(imageParts.ServiceConfigPath, filepath.Join(imagePath, "service.json")); err != nil {
-		return "", aoserrors.Wrap(err)
-	}
-
-	if err := os.Rename(imageParts.ServiceFSPath, filepath.Join(imagePath, "rootfs")); err != nil {
-		return "", aoserrors.Wrap(err)
-	}
-
 	log.WithFields(log.Fields{
 		"imagePath": imagePath,
 	}).Debug("Service image unpacked")
