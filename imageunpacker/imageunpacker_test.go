@@ -87,7 +87,7 @@ func TestMain(m *testing.M) {
 func TestServiceUnpack(t *testing.T) {
 	imageunpacker.DigestDirCb = dirDigestGenerate
 
-	archivePath, err := prepareService()
+	archivePath, aosSrvConfigDigest, err := prepareService()
 	if err != nil {
 		t.Fatalf("Error prepare service: %v", err)
 	}
@@ -107,7 +107,9 @@ func TestServiceUnpack(t *testing.T) {
 	}
 
 	expectedFiles := []string{
-		"image.json", "manifest.json", "rootfs/home/service.py", "service.json",
+		"blobs/sha256/38acb15d02d5ac0f2a2789602e9df950c380d2799b4bdb59394e4eeabdd3a662/home/service.py",
+		filepath.Join("blobs/sha256/", aosSrvConfigDigest.Hex()),
+		"manifest.json",
 	}
 
 	var unpackedFiles []string
@@ -146,63 +148,58 @@ func dirDigestGenerate(files []string, open func(string) (io.ReadCloser, error))
 	return "sha256:38acb15d02d5ac0f2a2789602e9df950c380d2799b4bdb59394e4eeabdd3a662", nil
 }
 
-func prepareService() (string, error) {
+func prepareService() (string, digest.Digest, error) {
 	imageDir, err := ioutil.TempDir("", "aos_")
 	if err != nil {
-		return "", aoserrors.Wrap(err)
+		return "", "", aoserrors.Wrap(err)
 	}
 
 	defer os.RemoveAll(imageDir)
 
 	if err := os.MkdirAll(filepath.Join(imageDir, "rootfs", "home"), 0o755); err != nil {
-		return "", aoserrors.Wrap(err)
+		return "", "", aoserrors.Wrap(err)
 	}
 
 	if _, err := os.Create(filepath.Join(imageDir, "rootfs", "home", "service.py")); err != nil {
-		return "", aoserrors.Wrap(err)
+		return "", "", aoserrors.Wrap(err)
 	}
 
 	rootFsPath := filepath.Join(imageDir, "rootfs")
 
 	serviceSize, err := fs.GetDirSize(rootFsPath)
 	if err != nil {
-		return "", aoserrors.Wrap(err)
+		return "", "", aoserrors.Wrap(err)
 	}
 
 	fsDigest, err := generateFsLayer(imageDir, rootFsPath)
 	if err != nil {
-		return "", aoserrors.Wrap(err)
+		return "", "", aoserrors.Wrap(err)
 	}
 
-	imgSpecDigestDigest, err := generateAndSaveDigest(filepath.Join(imageDir, blobsFolder), []byte(`{"image":"config"}`))
+	aosSrvConfigDigest, err := generateAndSaveDigest(filepath.Join(imageDir, blobsFolder), []byte("{}"))
 	if err != nil {
-		return "", aoserrors.Wrap(err)
-	}
-
-	aosSrvConfigDigest, err := generateAndSaveDigest(filepath.Join(imageDir, blobsFolder), []byte(`{"service": "config"}`))
-	if err != nil {
-		return "", aoserrors.Wrap(err)
+		return "", "", aoserrors.Wrap(err)
 	}
 
 	if err := genarateImageManfest(
-		imageDir, &imgSpecDigestDigest, &aosSrvConfigDigest, &fsDigest,
+		imageDir, &aosSrvConfigDigest, &fsDigest,
 		serviceSize); err != nil {
-		return "", aoserrors.Wrap(err)
+		return "", "", aoserrors.Wrap(err)
 	}
 
 	imageFile, err := ioutil.TempFile("", "aos_")
 	if err != nil {
-		return "", aoserrors.Wrap(err)
+		return "", "", aoserrors.Wrap(err)
 	}
 
 	archivePath := imageFile.Name()
 	imageFile.Close()
 
 	if err = packImage(imageDir, archivePath); err != nil {
-		return "", aoserrors.Wrap(err)
+		return "", "", aoserrors.Wrap(err)
 	}
 
-	return archivePath, nil
+	return archivePath, aosSrvConfigDigest, nil
 }
 
 func packImage(source, name string) (err error) {
@@ -273,7 +270,7 @@ func generateFsLayer(imgFolder, rootfs string) (digest digest.Digest, err error)
 	return digest, nil
 }
 
-func genarateImageManfest(folderPath string, imgConfig, aosSrvConfig, rootfsLayer *digest.Digest,
+func genarateImageManfest(folderPath string, imgConfig, rootfsLayer *digest.Digest,
 	rootfsLayerSize int64,
 ) (err error) {
 	type serviceManifest struct {
@@ -287,13 +284,6 @@ func genarateImageManfest(folderPath string, imgConfig, aosSrvConfig, rootfsLaye
 	manifest.Config = imagespec.Descriptor{
 		MediaType: "application/vnd.oci.image.config.v1+json",
 		Digest:    *imgConfig,
-	}
-
-	if aosSrvConfig != nil {
-		manifest.AosService = &imagespec.Descriptor{
-			MediaType: "application/vnd.aos.service.config.v1+json",
-			Digest:    *aosSrvConfig,
-		}
 	}
 
 	layerDescriptor := imagespec.Descriptor{
