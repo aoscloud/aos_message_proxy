@@ -98,12 +98,16 @@ func TestGetWorkingDir(t *testing.T) {
 }
 
 func TestGetXenConfig(t *testing.T) {
-	if testCfg.XSPath != "xsPath" {
-		t.Errorf("Expected XsPath to be xsPath, got %s", testCfg.XSPath)
+	if testCfg.VChan.XsRxPath != "xsPathRead" {
+		t.Errorf("Expected XSPath to be xsPathRead, got %s", testCfg.VChan.XsRxPath)
 	}
 
-	if testCfg.Domain != 1 {
-		t.Errorf("Expected Domain to be 1, got %d", testCfg.Domain)
+	if testCfg.VChan.Domain != 1 {
+		t.Errorf("Expected Domain to be 1, got %d", testCfg.VChan.Domain)
+	}
+
+	if testCfg.VChan.XsTxPath != "xsPathWrite" {
+		t.Errorf("Expected XSPath to be xsPathWrite, got %s", testCfg.VChan.XsTxPath)
 	}
 }
 
@@ -132,8 +136,11 @@ func createConfigFile(fileName string) (err error) {
 	"cmServerUrl": "aoscm:8093",
 	"imageStoreDir": "/var/aos/storage",
 	"workingDir" : "workingDir",
-	"xsPath": "xsPath",
-	"domain": 1,
+	"vchan": {
+		"xsRxPath": "xsPathRead",
+		"xsTxPath": "xsPathWrite",
+		"domain": 1
+	},
 	"downloader": {
 		"downloadDir": "/path/to/download",
 		"maxConcurrentDownloads": 10,
