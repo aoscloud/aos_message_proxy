@@ -124,9 +124,10 @@ func main() {
 		return
 	}
 
-	vch, err := vchanmanager.New(config, downloadmanager, unpackmanager, vchanmanager.NewVChan())
+	vch, err := vchanmanager.New(
+		config, downloadmanager, unpackmanager, vchanmanager.NewVChan(), vchanmanager.NewVChan())
 	if err != nil {
-		log.Fatalf("Can't create vchan: %s", err)
+		log.Fatalf("Can't create vchanmanager: %s", err)
 
 		return
 	}
