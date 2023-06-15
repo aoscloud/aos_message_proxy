@@ -22,8 +22,6 @@
 
 package vchanmanager
 
-import "context"
-
 /***********************************************************************************************************************
  * Types
  **********************************************************************************************************************/
@@ -42,7 +40,7 @@ func (v *VChan) Init(domain int, xsPath string) error {
 	return nil
 }
 
-func (v *VChan) Read(ctx context.Context) ([]byte, error) {
+func (v *VChan) Read() ([]byte, error) {
 	return nil, nil
 }
 

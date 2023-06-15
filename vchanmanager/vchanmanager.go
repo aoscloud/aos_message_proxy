@@ -59,22 +59,23 @@ type Unpacker interface {
 // VChanItf interface for vchan.
 type VChanItf interface {
 	Init(domain int, xsPath string) error
-	Read(ctx context.Context) ([]byte, error)
+	Read() ([]byte, error)
 	Write(data []byte) error
 	Close()
 }
 
 // Vchan vchan instance.
 type VChanManager struct {
-	vchan                VChanItf
-	recvChan             chan []byte
-	sendChan             chan []byte
-	cancel               context.CancelFunc
-	waitConnection       sync.WaitGroup
-	connectionLostNotify chan struct{}
-	cfg                  *config.Config
-	downloadManager      Downloader
-	unpackerManager      Unpacker
+	sync.Mutex
+
+	vchanReader     VChanItf
+	vchanWriter     VChanItf
+	recvChan        chan []byte
+	sendChan        chan []byte
+	cancel          context.CancelFunc
+	cfg             *config.Config
+	downloadManager Downloader
+	unpackerManager Unpacker
 }
 
 /***********************************************************************************************************************
@@ -92,23 +93,32 @@ var (
 
 // New creates new vchan instance.
 func New(
-	cfg *config.Config, downloadManager Downloader, unpackerManager Unpacker, vchan VChanItf,
+	cfg *config.Config, downloadManager Downloader, unpackerManager Unpacker, vchanReader VChanItf, vchanWriter VChanItf,
 ) (*VChanManager, error) {
+	if vchanReader == nil {
+		return nil, aoserrors.New("reader vchan is nil")
+	}
+
+	if vchanWriter == nil {
+		return nil, aoserrors.New("writer vchan is nil")
+	}
+
 	v := &VChanManager{
-		recvChan:             make(chan []byte, channelSize),
-		sendChan:             make(chan []byte, channelSize),
-		connectionLostNotify: make(chan struct{}, 1),
-		cfg:                  cfg,
-		vchan:                vchan,
-		downloadManager:      downloadManager,
-		unpackerManager:      unpackerManager,
+		recvChan:        make(chan []byte, channelSize),
+		sendChan:        make(chan []byte, channelSize),
+		cfg:             cfg,
+		vchanReader:     vchanReader,
+		vchanWriter:     vchanWriter,
+		downloadManager: downloadManager,
+		unpackerManager: unpackerManager,
 	}
 
 	var ctx context.Context
 
 	ctx, v.cancel = context.WithCancel(context.Background())
 
-	go v.run(ctx)
+	go v.runReader(ctx)
+	go v.runWriter(ctx)
 
 	return v, nil
 }
@@ -129,8 +139,12 @@ func (v *VChanManager) Close() {
 		v.cancel()
 	}
 
-	if v.vchan != nil {
-		v.vchan.Close()
+	if v.vchanReader != nil {
+		v.vchanReader.Close()
+	}
+
+	if v.vchanWriter != nil {
+		v.vchanWriter.Close()
 	}
 
 	close(v.recvChan)
@@ -141,21 +155,42 @@ func (v *VChanManager) Close() {
  * Private
  **********************************************************************************************************************/
 
-func (v *VChanManager) run(ctx context.Context) {
+func (v *VChanManager) runReader(ctx context.Context) {
 	for {
-		err := v.vchan.Init(v.cfg.Domain, v.cfg.XSPath)
+		// Initialization of vchan for a single domain must be synchronous.
+		v.Lock()
+		err := v.vchanReader.Init(v.cfg.VChan.Domain, v.cfg.VChan.XsRxPath)
+		v.Unlock()
 		if err == nil {
-			v.waitConnection.Add(2) // nolint:gomnd
-
-			go v.reader(ctx)
-			go v.writer(ctx)
-
-			v.waitConnection.Wait()
+			v.reader(ctx)
 		} else {
-			log.Errorf("Failed connect to vchan: %v", err)
+			log.Errorf("Failed connect to reader vchan: %v", aoserrors.Wrap(err))
 		}
 
-		log.Debugf("Reconnect to vchan in %v...", reconnectTimeout)
+		log.Debugf("Reconnect to reader vchan in %v...", reconnectTimeout)
+
+		select {
+		case <-ctx.Done():
+			return
+
+		case <-time.After(reconnectTimeout):
+		}
+	}
+}
+
+func (v *VChanManager) runWriter(ctx context.Context) {
+	for {
+		// Initialization of vchan for a single domain must be synchronous.
+		v.Lock()
+		err := v.vchanWriter.Init(v.cfg.VChan.Domain, v.cfg.VChan.XsTxPath)
+		v.Unlock()
+		if err == nil {
+			v.writer(ctx)
+		} else {
+			log.Errorf("Failed connect to writer vchan: %v", aoserrors.Wrap(err))
+		}
+
+		log.Debugf("Reconnect to writer vchan in %v...", reconnectTimeout)
 
 		select {
 		case <-ctx.Done():
@@ -167,19 +202,14 @@ func (v *VChanManager) run(ctx context.Context) {
 }
 
 func (v *VChanManager) writer(ctx context.Context) {
-	defer v.waitConnection.Done()
-
 	for {
 		select {
 		case data := <-v.sendChan:
-			if err := v.vchan.Write(data); err != nil {
+			if err := v.vchanWriter.Write(data); err != nil {
 				log.Errorf("Failed write to vchan: %v", aoserrors.Wrap(err))
 
 				return
 			}
-
-		case <-v.connectionLostNotify:
-			return
 
 		case <-ctx.Done():
 			return
@@ -188,16 +218,13 @@ func (v *VChanManager) writer(ctx context.Context) {
 }
 
 func (v *VChanManager) reader(ctx context.Context) {
-	defer v.waitConnection.Done()
-	defer func() { v.connectionLostNotify <- struct{}{} }()
-
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
 		default:
-			buffer, err := v.vchan.Read(ctx)
+			buffer, err := v.vchanReader.Read()
 			if err != nil {
 				if errors.Is(err, ErrContextCanceled) {
 					return
@@ -354,7 +381,7 @@ func (v *VChanManager) sendFailedImageContentResponse(requestID uint64, err erro
 		return aoserrors.Wrap(err)
 	}
 
-	return aoserrors.Wrap(v.vchan.Write(data))
+	return aoserrors.Wrap(v.vchanWriter.Write(data))
 }
 
 func (v *VChanManager) sendImageContent(imageMessage *pb.SMIncomingMessages) error {
@@ -363,7 +390,7 @@ func (v *VChanManager) sendImageContent(imageMessage *pb.SMIncomingMessages) err
 		return aoserrors.Wrap(err)
 	}
 
-	return aoserrors.Wrap(v.vchan.Write(data))
+	return aoserrors.Wrap(v.vchanWriter.Write(data))
 }
 
 func (v *VChanManager) isImageContentRequest(data []byte) (*pb.SMOutgoingMessages_ImageContentRequest, bool) {
