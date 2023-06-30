@@ -87,11 +87,14 @@ func TestReadWriteData(t *testing.T) {
 		recv: make(chan []byte, 1),
 	}
 	vch, err := vchanmanager.New(&config.Config{
-		XSPath: "domain/path",
-		Domain: 0,
-	}, &testDownloader{}, nil, tVchan)
+		VChan: config.VChanConfig{
+			XsRxPath: "/tmp/xs_rx",
+			XsTxPath: "/tmp/xs_tx",
+			Domain:   1,
+		},
+	}, &testDownloader{}, nil, tVchan, tVchan)
 	if err != nil {
-		t.Errorf("Can't create a new communication manager: %v", err)
+		t.Errorf("Can't create a new vchannel manager: %v", err)
 	}
 	defer vch.Close()
 
@@ -161,13 +164,16 @@ func TestDownload(t *testing.T) {
 	}
 
 	vch, err := vchanmanager.New(&config.Config{
-		XSPath: "domain/path",
-		Domain: 0,
+		VChan: config.VChanConfig{
+			XsRxPath: "/tmp/xs_rx",
+			XsTxPath: "/tmp/xs_tx",
+			Domain:   1,
+		},
 	}, &testDownloader{
 		downloadedFile: fileName,
 	}, &testUnpacker{
 		filePath: tmpDir,
-	}, tVchan)
+	}, tVchan, tVchan)
 	if err != nil {
 		t.Errorf("Can't create a new communication manager: %v", err)
 	}
@@ -285,7 +291,7 @@ func (v *testVChan) Init(domain int, xsPath string) error {
 	return nil
 }
 
-func (v *testVChan) Read(ctx context.Context) ([]byte, error) {
+func (v *testVChan) Read() ([]byte, error) {
 	return <-v.recv, nil
 }
 

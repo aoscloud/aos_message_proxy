@@ -105,6 +105,7 @@ func TestGetCertificate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Can't create test server: %v", err)
 	}
+
 	defer testServer.close()
 
 	client, err := iamclient.New(&config.Config{

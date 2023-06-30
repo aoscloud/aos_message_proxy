@@ -69,8 +69,8 @@ type serviceManifest struct {
  * Vars
  **********************************************************************************************************************/
 
-// This is a callback uses for mock testing.
-var DigestDirCb = dirDigest
+// DigestDirCb this is a callback uses for mock testing.
+var DigestDirCb = dirDigest // nolint:gochecknoglobals
 
 /***********************************************************************************************************************
  * Private
@@ -96,23 +96,6 @@ func (unpacker *ImageUnpacker) serviceUnpack(archivePath string) (string, error)
 	}
 
 	if err = updateRootFSDigestInManifest(imagePath, rootFSDigest); err != nil {
-		return "", err
-	}
-
-	imageParts, err := getImageParts(imagePath)
-	if err != nil {
-		return "", err
-	}
-
-	if err := os.Rename(imageParts.ImageConfigPath, filepath.Join(imagePath, "image.json")); err != nil {
-		return "", err
-	}
-
-	if err := os.Rename(imageParts.ServiceConfigPath, filepath.Join(imagePath, "service.json")); err != nil {
-		return "", err
-	}
-
-	if err := os.Rename(imageParts.ServiceFSPath, filepath.Join(imagePath, "rootfs")); err != nil {
 		return "", err
 	}
 

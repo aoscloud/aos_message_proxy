@@ -91,6 +91,7 @@ func TestServiceUnpack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error prepare service: %v", err)
 	}
+
 	defer os.Remove(archivePath)
 
 	unpacker, err := imageunpacker.New(&config.Config{

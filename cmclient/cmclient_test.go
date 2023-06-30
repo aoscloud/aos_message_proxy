@@ -82,6 +82,7 @@ func TestOutgoingMessages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Can't create test server: %v", err)
 	}
+
 	defer server.close()
 
 	receiver := make(chan []byte, 1)
@@ -174,6 +175,7 @@ func TestIncomingMessages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Can't create test server: %v", err)
 	}
+
 	defer server.close()
 
 	receiver := make(chan []byte, 1)

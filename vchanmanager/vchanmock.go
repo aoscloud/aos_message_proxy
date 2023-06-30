@@ -15,53 +15,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package imageunpacker
+//go:build test
 
-import (
-	"os"
+// This file is used for successful build on the CI server.
+// It is used instead of the vchan.go file.
 
-	"github.com/aoscloud/aos_common/aoserrors"
-
-	"github.com/aoscloud/aos_messageproxy/config"
-)
+package vchanmanager
 
 /***********************************************************************************************************************
  * Types
  **********************************************************************************************************************/
 
-// ImageUnpacker instance.
-type ImageUnpacker struct {
-	imageStore    string
-	contentUnpack map[string]func(string) (string, error)
-}
+type VChan struct{}
 
 /***********************************************************************************************************************
  * Public
  **********************************************************************************************************************/
 
-// New creates new ImageUnpacker instance.
-func New(cfg *config.Config) (*ImageUnpacker, error) {
-	if err := os.MkdirAll(cfg.ImageStoreDir, 0o755); err != nil {
-		return nil, aoserrors.Wrap(err)
-	}
-
-	imageUnpacker := &ImageUnpacker{
-		imageStore: cfg.ImageStoreDir,
-	}
-
-	imageUnpacker.contentUnpack = map[string]func(string) (string, error){
-		"service": imageUnpacker.serviceUnpack,
-	}
-
-	return imageUnpacker, nil
+func NewVChan() *VChan {
+	return &VChan{}
 }
 
-// Unpack unpacks image content.
-func (unpacker *ImageUnpacker) Unpack(archivePath string, contentType string) (string, error) {
-	unpackerFunc, ok := unpacker.contentUnpack[contentType]
-	if !ok {
-		return "", aoserrors.Errorf("Unsupported content type: %s", contentType)
-	}
-
-	return unpackerFunc(archivePath)
+func (v *VChan) Init(domain int, xsPath string) error {
+	return nil
 }
+
+func (v *VChan) Read() ([]byte, error) {
+	return nil, nil
+}
+
+func (v *VChan) Write(data []byte) error {
+	return nil
+}
+
+func (v *VChan) Close() {}

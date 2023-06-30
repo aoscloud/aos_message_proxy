@@ -204,6 +204,7 @@ func TestConcurrentDownloads(t *testing.T) {
 
 	for i := 0; i < numDownloads; i++ {
 		wg.Add(1)
+
 		go func(i int) {
 			defer wg.Done()
 
