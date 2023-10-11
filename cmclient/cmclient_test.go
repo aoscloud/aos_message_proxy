@@ -88,7 +88,7 @@ func TestOutgoingMessages(t *testing.T) {
 	receiver := make(chan []byte, 1)
 	sender := make(chan []byte, 1)
 
-	client, err := cmclient.New(&config.Config{CMServerURL: serverURL}, nil, nil, receiver, sender, true)
+	client, err := cmclient.New(&config.Config{CMServerURL: serverURL}, nil, nil, receiver, sender, nil, true)
 	if err != nil {
 		t.Fatalf("Can't create UM client: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestIncomingMessages(t *testing.T) {
 	receiver := make(chan []byte, 1)
 	sender := make(chan []byte, 1)
 
-	client, err := cmclient.New(&config.Config{CMServerURL: serverURL}, nil, nil, receiver, sender, true)
+	client, err := cmclient.New(&config.Config{CMServerURL: serverURL}, nil, nil, receiver, sender, nil, true)
 	if err != nil {
 		t.Fatalf("Can't create UM client: %v", err)
 	}

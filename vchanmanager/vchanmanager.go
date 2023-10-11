@@ -73,6 +73,7 @@ type VChanManager struct {
 	vchanWriter     VChanItf
 	recvChan        chan []byte
 	sendChan        chan []byte
+	errorChan       chan struct{}
 	cancel          context.CancelFunc
 	cfg             *config.Config
 	downloadManager Downloader
@@ -107,6 +108,7 @@ func New(
 	v := &VChanManager{
 		recvChan:        make(chan []byte, channelSize),
 		sendChan:        make(chan []byte, channelSize),
+		errorChan:       make(chan struct{}, 1),
 		cfg:             cfg,
 		vchanReader:     vchanReader,
 		vchanWriter:     vchanWriter,
@@ -118,8 +120,7 @@ func New(
 
 	ctx, v.cancel = context.WithCancel(context.Background())
 
-	go v.runReader(ctx)
-	go v.runWriter(ctx)
+	go v.run(ctx)
 
 	return v, nil
 }
@@ -132,6 +133,11 @@ func (v *VChanManager) GetReceivingChannel() <-chan []byte {
 // GetSendingChannel returns channel for sending data.
 func (v *VChanManager) GetSendingChannel() chan<- []byte {
 	return v.sendChan
+}
+
+// GetErrorChannel returns channel for errors.
+func (v *VChanManager) GetErrorChannel() chan<- struct{} {
+	return v.errorChan
 }
 
 // Close closes vchan.
@@ -155,6 +161,25 @@ func (v *VChanManager) Close() {
 /***********************************************************************************************************************
  * Private
  **********************************************************************************************************************/
+
+func (v *VChanManager) run(ctxExit context.Context) {
+	for {
+		ctxRestart, cancel := context.WithCancel(context.Background())
+
+		go v.runReader(ctxRestart)
+		go v.runWriter(ctxRestart)
+
+		select {
+		case <-ctxExit.Done():
+			cancel()
+
+			return
+
+		case <-v.errorChan:
+			cancel()
+		}
+	}
+}
 
 func (v *VChanManager) runReader(ctx context.Context) {
 	for {

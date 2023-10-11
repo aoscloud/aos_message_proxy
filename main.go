@@ -149,7 +149,8 @@ func main() {
 	}
 	defer iam.Close()
 
-	cm, err := cmclient.New(config, iam, cryptoContext, vch.GetReceivingChannel(), vch.GetSendingChannel(), false)
+	cm, err := cmclient.New(
+		config, iam, cryptoContext, vch.GetReceivingChannel(), vch.GetSendingChannel(), vch.GetErrorChannel(), false)
 	if err != nil {
 		log.Fatalf("Can't create cm client: %s", err)
 
