@@ -19,8 +19,7 @@ package cmclient
 
 import (
 	"context"
-	"errors"
-	"io"
+	"os"
 	"sync"
 	"time"
 
@@ -150,7 +149,7 @@ func (client *CMClient) run(ctx context.Context) {
 				client.waitConnection.Add(2) // nolint:gomnd
 
 				go client.receiveOutgoingMessages(ctx)
-				go client.receiveIncomingMessages()
+				go func() { _ = client.receiveIncomingMessages() }()
 
 				client.waitConnection.Wait()
 			} else {
@@ -171,17 +170,19 @@ func (client *CMClient) run(ctx context.Context) {
 	}
 }
 
-func (client *CMClient) receiveIncomingMessages() {
-	defer client.waitConnection.Done()
-	defer func() { client.connectionLostNotify <- struct{}{} }()
+func (client *CMClient) receiveIncomingMessages() (err error) {
+	defer func() {
+		client.connectionLostNotify <- struct{}{}
+		client.waitConnection.Done()
 
-	if err := client.processMessages(); err != nil {
-		if errors.Is(err, io.EOF) {
-			log.Debug("Connection is closed")
-		} else {
+		if err != nil {
 			log.Errorf("Connection error: %v", err)
+
+			os.Exit(1)
 		}
-	}
+	}()
+
+	return client.processMessages()
 }
 
 func (client *CMClient) processMessages() (err error) {
