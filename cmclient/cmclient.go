@@ -58,7 +58,6 @@ type CMClient struct {
 	cancel                context.CancelFunc
 	sendChan              chan<- []byte
 	recvChan              <-chan []byte
-	errorChan             chan<- struct{}
 	waitConnection        sync.WaitGroup
 	savedOutgoingMessages []*pb.SMOutgoingMessages
 	connectionLostNotify  chan struct{}
@@ -76,14 +75,13 @@ type CertificateProvider interface {
 // New creates new CM client.
 func New(
 	cfg *config.Config, certProvider CertificateProvider, cryptcoxontext *cryptutils.CryptoContext,
-	recvChan <-chan []byte, sendChan chan<- []byte, errorChan chan<- struct{}, insecureCon bool,
+	recvChan <-chan []byte, sendChan chan<- []byte, insecureCon bool,
 ) (client *CMClient, err error) {
 	log.Debug("Connecting to CM...")
 
 	client = &CMClient{
 		sendChan:             sendChan,
 		recvChan:             recvChan,
-		errorChan:            errorChan,
 		connectionLostNotify: make(chan struct{}, 1),
 	}
 
@@ -182,8 +180,6 @@ func (client *CMClient) receiveIncomingMessages() {
 			log.Debug("Connection is closed")
 		} else {
 			log.Errorf("Connection error: %v", err)
-
-			client.errorChan <- struct{}{}
 		}
 	}
 }
