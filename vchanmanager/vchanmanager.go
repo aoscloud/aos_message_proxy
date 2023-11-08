@@ -28,7 +28,6 @@ import (
 	pb "github.com/aoscloud/aos_common/api/servicemanager/v3"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/aoscloud/aos_messageproxy/config"
 	"github.com/aoscloud/aos_messageproxy/filechunker"
@@ -252,21 +251,6 @@ func (v *VChanManager) reader(ctx context.Context) {
 				continue
 			}
 
-			if nodeMonitoring, ok := v.isNodeMonitoring(buffer); ok {
-				nodeMonitoring.NodeMonitoring.Timestamp = timestamppb.New(time.Now())
-
-				buffer, err = proto.Marshal(&pb.SMOutgoingMessages{SMOutgoingMessage: &pb.SMOutgoingMessages_NodeMonitoring{
-					NodeMonitoring: nodeMonitoring.NodeMonitoring,
-				}})
-				if err != nil {
-					log.Errorf("Failed to marshal node monitoring message: %v", aoserrors.Wrap(err))
-
-					continue
-				}
-
-				log.Debugf("Node monitoring message: %v", nodeMonitoring.NodeMonitoring)
-			}
-
 			// This is necessary to avoid writing to a closed channel
 			select {
 			case <-ctx.Done():
@@ -409,21 +393,6 @@ func (v *VChanManager) sendImageContent(imageMessage *pb.SMIncomingMessages) err
 	}
 
 	return aoserrors.Wrap(v.vchanWriter.Write(data))
-}
-
-func (v *VChanManager) isNodeMonitoring(data []byte) (*pb.SMOutgoingMessages_NodeMonitoring, bool) {
-	outgoingMessage := &pb.SMOutgoingMessages{}
-
-	err := proto.Unmarshal(data, outgoingMessage)
-	if err != nil {
-		log.Errorf("Failed to unmarshal outgoing message: %v", aoserrors.Wrap(err))
-
-		return nil, false
-	}
-
-	nodeMonitoring, ok := outgoingMessage.GetSMOutgoingMessage().(*pb.SMOutgoingMessages_NodeMonitoring)
-
-	return nodeMonitoring, ok
 }
 
 func (v *VChanManager) isImageContentRequest(data []byte) (*pb.SMOutgoingMessages_ImageContentRequest, bool) {
