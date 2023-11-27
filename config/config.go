@@ -19,7 +19,7 @@ package config
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"os"
 	"path"
 	"time"
 
@@ -64,16 +64,16 @@ type Config struct {
 
 // New creates new Config instance.
 func New(fileName string) (*Config, error) {
-	rawConfig, err := ioutil.ReadFile(fileName)
+	rawConfig, err := os.ReadFile(fileName)
 	if err != nil {
 		return nil, aoserrors.Wrap(err)
 	}
 
 	cfg := &Config{
 		Downloader: Downloader{
-			MaxConcurrentDownloads: 4, // nolint:gomnd
+			MaxConcurrentDownloads: 4, //nolint:gomnd
 			RetryDelay:             aostypes.Duration{Duration: 1 * time.Minute},
-			MaxRetryDelay:          aostypes.Duration{Duration: 30 * time.Minute}, // nolint:gomnd
+			MaxRetryDelay:          aostypes.Duration{Duration: 30 * time.Minute}, //nolint:gomnd
 		},
 	}
 

@@ -22,7 +22,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -70,7 +69,7 @@ type serviceManifest struct {
  **********************************************************************************************************************/
 
 // DigestDirCb this is a callback uses for mock testing.
-var DigestDirCb = dirDigest // nolint:gochecknoglobals
+var DigestDirCb = dirDigest //nolint:gochecknoglobals
 
 /***********************************************************************************************************************
  * Private
@@ -121,7 +120,7 @@ func validateUnpackedImage(installDir string) (err error) {
 			return err
 		}
 
-		byteValue, err := ioutil.ReadFile(path.Join(
+		byteValue, err := os.ReadFile(path.Join(
 			installDir, blobsFolder, string(manifest.AosService.Digest.Algorithm()), manifest.AosService.Digest.Hex()))
 		if err != nil {
 			return aoserrors.Wrap(err)
@@ -211,7 +210,7 @@ func saveImageManifest(manifest *serviceManifest, installDir string) (err error)
 		return aoserrors.Wrap(err)
 	}
 
-	if err = ioutil.WriteFile(path.Join(installDir, manifestFileName), manifestData, 0o600); err != nil {
+	if err = os.WriteFile(path.Join(installDir, manifestFileName), manifestData, 0o600); err != nil {
 		return aoserrors.Wrap(err)
 	}
 
@@ -252,7 +251,7 @@ func (unpacker *ImageUnpacker) prepareServiceFS(imagePath string) (rootFSDigest 
 }
 
 func (unpacker *ImageUnpacker) extractPackageByURL(archivePath string) (imagePath string, err error) {
-	imagePath, err = ioutil.TempDir(unpacker.imageStore, "")
+	imagePath, err = os.MkdirTemp(unpacker.imageStore, "")
 	if err != nil {
 		return "", aoserrors.Wrap(err)
 	}
@@ -285,7 +284,7 @@ func getImageParts(installDir string) (parts ImageParts, err error) {
 }
 
 func getImageManifest(installDir string) (*serviceManifest, error) {
-	manifestJSON, err := ioutil.ReadFile(path.Join(installDir, manifestFileName))
+	manifestJSON, err := os.ReadFile(path.Join(installDir, manifestFileName))
 	if err != nil {
 		return nil, aoserrors.Wrap(err)
 	}

@@ -146,7 +146,7 @@ func (client *CMClient) run(ctx context.Context) {
 		default:
 			err := client.registerStream()
 			if err == nil {
-				client.waitConnection.Add(2) // nolint:gomnd
+				client.waitConnection.Add(2) //nolint:gomnd
 
 				go client.receiveOutgoingMessages(ctx)
 				go func() { _ = client.receiveIncomingMessages() }()

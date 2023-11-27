@@ -20,7 +20,6 @@
 package config_test
 
 import (
-	"io/ioutil"
 	"log"
 	"os"
 	"path"
@@ -150,7 +149,7 @@ func createConfigFile(fileName string) (err error) {
 	}
 }`
 
-	if err := ioutil.WriteFile(fileName, []byte(configContent), 0o600); err != nil {
+	if err := os.WriteFile(fileName, []byte(configContent), 0o600); err != nil {
 		return aoserrors.Wrap(err)
 	}
 
@@ -158,7 +157,7 @@ func createConfigFile(fileName string) (err error) {
 }
 
 func setup() (err error) {
-	if tmpDir, err = ioutil.TempDir("", "aos_"); err != nil {
+	if tmpDir, err = os.MkdirTemp("", "aos_"); err != nil {
 		return aoserrors.Wrap(err)
 	}
 

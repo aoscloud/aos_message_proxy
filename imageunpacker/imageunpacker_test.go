@@ -21,7 +21,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -149,7 +148,7 @@ func dirDigestGenerate(files []string, open func(string) (io.ReadCloser, error))
 }
 
 func prepareService() (string, digest.Digest, error) {
-	imageDir, err := ioutil.TempDir("", "aos_")
+	imageDir, err := os.MkdirTemp("", "aos_")
 	if err != nil {
 		return "", "", aoserrors.Wrap(err)
 	}
@@ -181,13 +180,13 @@ func prepareService() (string, digest.Digest, error) {
 		return "", "", aoserrors.Wrap(err)
 	}
 
-	if err := genarateImageManfest(
+	if err := generateImageManifest(
 		imageDir, &aosSrvConfigDigest, &fsDigest,
 		serviceSize); err != nil {
 		return "", "", aoserrors.Wrap(err)
 	}
 
-	imageFile, err := ioutil.TempFile("", "aos_")
+	imageFile, err := os.CreateTemp("", "aos_")
 	if err != nil {
 		return "", "", aoserrors.Wrap(err)
 	}
@@ -249,13 +248,7 @@ func generateFsLayer(imgFolder, rootfs string) (digest digest.Digest, err error)
 	}
 	defer os.Remove(tarFile)
 
-	file, err := os.Open(tarFile)
-	if err != nil {
-		return digest, aoserrors.Wrap(err)
-	}
-	defer file.Close()
-
-	byteValue, err := ioutil.ReadAll(file)
+	byteValue, err := os.ReadFile(tarFile)
 	if err != nil {
 		return digest, aoserrors.Wrap(err)
 	}
@@ -270,7 +263,7 @@ func generateFsLayer(imgFolder, rootfs string) (digest digest.Digest, err error)
 	return digest, nil
 }
 
-func genarateImageManfest(folderPath string, imgConfig, rootfsLayer *digest.Digest,
+func generateImageManifest(folderPath string, imgConfig, rootfsLayer *digest.Digest,
 	rootfsLayerSize int64,
 ) (err error) {
 	type serviceManifest struct {
@@ -312,7 +305,7 @@ func genarateImageManfest(folderPath string, imgConfig, rootfsLayer *digest.Dige
 }
 
 func setup() (err error) {
-	if tmpDir, err = ioutil.TempDir("", "aos_"); err != nil {
+	if tmpDir, err = os.MkdirTemp("", "aos_"); err != nil {
 		return aoserrors.Wrap(err)
 	}
 

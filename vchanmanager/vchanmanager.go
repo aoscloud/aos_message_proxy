@@ -162,6 +162,7 @@ func (v *VChanManager) runReader(ctx context.Context) {
 		v.Lock()
 		err := v.vchanReader.Init(v.cfg.VChan.Domain, v.cfg.VChan.XsRxPath)
 		v.Unlock()
+
 		if err == nil {
 			v.reader(ctx)
 		} else {
@@ -185,6 +186,7 @@ func (v *VChanManager) runWriter(ctx context.Context) {
 		v.Lock()
 		err := v.vchanWriter.Init(v.cfg.VChan.Domain, v.cfg.VChan.XsTxPath)
 		v.Unlock()
+
 		if err == nil {
 			v.writer(ctx)
 		} else {
@@ -243,8 +245,8 @@ func (v *VChanManager) reader(ctx context.Context) {
 			if request, ok := v.isImageContentRequest(buffer); ok {
 				go func() {
 					v.download(
-						request.ImageContentRequest.Url, request.ImageContentRequest.RequestId,
-						request.ImageContentRequest.ContentType, ctx)
+						request.ImageContentRequest.GetUrl(), request.ImageContentRequest.GetRequestId(),
+						request.ImageContentRequest.GetContentType(), ctx)
 				}()
 
 				continue
@@ -270,7 +272,7 @@ func (v *VChanManager) reader(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			default:
-				v.recvChan <- buffer[:]
+				v.recvChan <- buffer
 			}
 		}
 	}
@@ -360,7 +362,7 @@ func convertImageFilesToPb(files []filechunker.ImageFile) []*pb.ImageFile {
 	for i, file := range files {
 		imageFiles[i] = &pb.ImageFile{
 			RelativePath: file.RelativePath,
-			Sha256:       file.Sha256[:],
+			Sha256:       file.Sha256,
 			Size:         file.Size,
 		}
 	}
@@ -377,7 +379,7 @@ func convertImageContentToPb(content []filechunker.ImageContent) []*pb.ImageCont
 			RelativePath: c.RelativePath,
 			PartsCount:   c.PartsCount,
 			Part:         c.Part,
-			Data:         c.Data[:],
+			Data:         c.Data,
 		}
 	}
 
