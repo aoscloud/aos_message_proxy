@@ -41,9 +41,11 @@ type Downloader struct {
 
 // VChanConfig vchan configuration.
 type VChanConfig struct {
-	Domain   int    `json:"domain"`
-	XsRxPath string `json:"xsRxPath"`
-	XsTxPath string `json:"xsTxPath"`
+	Domain       int    `json:"domain"`
+	XsRxPubPath  string `json:"xsRxPubPath"`
+	XsTxPubPath  string `json:"xsTxPubPath"`
+	XsRxPrivPath string `json:"xsRxPrivPath"`
+	XsTxPrivPath string `json:"xsTxPrivPath"`
 }
 
 // Config instance.
