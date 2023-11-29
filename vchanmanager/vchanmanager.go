@@ -20,6 +20,7 @@ package vchanmanager
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -29,7 +30,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/aoscloud/aos_messageproxy/config"
 	"github.com/aoscloud/aos_messageproxy/filechunker"
 )
 
@@ -58,22 +58,21 @@ type Unpacker interface {
 
 // VChanItf interface for vchan.
 type VChanItf interface {
-	Init(domain int, xsPath string) error
-	Read() ([]byte, error)
-	Write(data []byte) error
-	Close()
+	Connect(ctx context.Context) error
+	ReadMessage() ([]byte, error)
+	WriteMessage(data []byte) error
+	Disconnect() error
 }
 
 // Vchan vchan instance.
 type VChanManager struct {
 	sync.Mutex
 
-	vchanReader     VChanItf
-	vchanWriter     VChanItf
+	vchanPub        VChanItf
+	vchanPriv       VChanItf
 	recvChan        chan []byte
 	sendChan        chan []byte
 	cancel          context.CancelFunc
-	cfg             *config.Config
 	downloadManager Downloader
 	unpackerManager Unpacker
 }
@@ -83,8 +82,8 @@ type VChanManager struct {
  **********************************************************************************************************************/
 
 var (
-	ErrContextCanceled = errors.New("operation canceled due to context cancellation")
-	ErrChecksumFailed  = errors.New("checksum validation failed")
+	ErrChecksumFailed = errors.New("checksum validation failed")
+	errVChanWrite     = errors.New("vchan write failed")
 )
 
 /***********************************************************************************************************************
@@ -93,22 +92,17 @@ var (
 
 // New creates new vchan instance.
 func New(
-	cfg *config.Config, downloadManager Downloader, unpackerManager Unpacker, vchanReader VChanItf, vchanWriter VChanItf,
+	downloadManager Downloader, unpackerManager Unpacker, vchanPub VChanItf, vchanPriv VChanItf,
 ) (*VChanManager, error) {
-	if vchanReader == nil {
-		return nil, aoserrors.New("reader vchan is nil")
-	}
-
-	if vchanWriter == nil {
-		return nil, aoserrors.New("writer vchan is nil")
+	if vchanPub == nil || vchanPriv == nil {
+		return nil, aoserrors.Errorf("vchan is nil")
 	}
 
 	v := &VChanManager{
 		recvChan:        make(chan []byte, channelSize),
 		sendChan:        make(chan []byte, channelSize),
-		cfg:             cfg,
-		vchanReader:     vchanReader,
-		vchanWriter:     vchanWriter,
+		vchanPub:        vchanPub,
+		vchanPriv:       vchanPriv,
 		downloadManager: downloadManager,
 		unpackerManager: unpackerManager,
 	}
@@ -117,8 +111,13 @@ func New(
 
 	ctx, v.cancel = context.WithCancel(context.Background())
 
-	go v.runReader(ctx)
-	go v.runWriter(ctx)
+	sendChanPub := make(chan []byte, channelSize)
+	sendChanPriv := make(chan []byte, channelSize)
+
+	go v.filterWriter(ctx, sendChanPub, sendChanPriv)
+
+	go v.run(ctx, vchanPub, sendChanPub)
+	go v.run(ctx, vchanPriv, sendChanPriv)
 
 	return v, nil
 }
@@ -139,13 +138,8 @@ func (v *VChanManager) Close() {
 		v.cancel()
 	}
 
-	if v.vchanReader != nil {
-		v.vchanReader.Close()
-	}
-
-	if v.vchanWriter != nil {
-		v.vchanWriter.Close()
-	}
+	v.vchanPub.Disconnect()
+	v.vchanPriv.Disconnect()
 
 	close(v.recvChan)
 	close(v.sendChan)
@@ -155,19 +149,34 @@ func (v *VChanManager) Close() {
  * Private
  **********************************************************************************************************************/
 
-func (v *VChanManager) runReader(ctx context.Context) {
+func (v *VChanManager) run(ctx context.Context, vchan VChanItf, sendChan chan []byte) {
 	for {
-		// Initialization of vchan for a single domain must be synchronous.
-		v.Lock()
-		err := v.vchanReader.Init(v.cfg.VChan.Domain, v.cfg.VChan.XsRxPath)
-		v.Unlock()
-		if err == nil {
-			v.reader(ctx)
+		if err := vchan.Connect(ctx); err == nil {
+			errCh := make(chan error, 2)
+			localCtx, cancel := context.WithCancel(ctx)
+
+			go v.reader(localCtx, vchan, errCh)
+			go v.writer(localCtx, vchan, sendChan, errCh)
+
+			select {
+			case <-ctx.Done():
+				return
+
+			case err := <-errCh:
+				log.Errorf("Failed to read/write from/to vchan: %v", err)
+
+				if err = vchan.Disconnect(); err != nil {
+					log.Errorf("Failed to disconnect from vchan: %v", err)
+				}
+
+				cancel()
+			}
+
 		} else {
 			log.Errorf("Failed connect to reader vchan: %v", aoserrors.Wrap(err))
 		}
 
-		log.Debugf("Reconnect to reader vchan in %v...", reconnectTimeout)
+		log.Debugf("Reconnect to vchan in %v...", reconnectTimeout)
 
 		select {
 		case <-ctx.Done():
@@ -178,35 +187,34 @@ func (v *VChanManager) runReader(ctx context.Context) {
 	}
 }
 
-func (v *VChanManager) runWriter(ctx context.Context) {
+func (v *VChanManager) filterWriter(ctx context.Context, sendChanPub, sendChanPriv chan []byte) {
 	for {
-		// Initialization of vchan for a single domain must be synchronous.
-		v.Lock()
-		err := v.vchanWriter.Init(v.cfg.VChan.Domain, v.cfg.VChan.XsTxPath)
-		v.Unlock()
-		if err == nil {
-			v.writer(ctx)
-		} else {
-			log.Errorf("Failed connect to writer vchan: %v", aoserrors.Wrap(err))
-		}
-
-		log.Debugf("Reconnect to writer vchan in %v...", reconnectTimeout)
-
 		select {
+		case data, ok := <-v.sendChan:
+			if !ok {
+				return
+			}
+
+			if isPublicMessage(data) {
+				sendChanPub <- data
+
+				continue
+			}
+
+			sendChanPriv <- data
+
 		case <-ctx.Done():
 			return
-
-		case <-time.After(reconnectTimeout):
 		}
 	}
 }
 
-func (v *VChanManager) writer(ctx context.Context) {
+func (v *VChanManager) writer(ctx context.Context, vchan VChanItf, sendChan chan []byte, errCh chan<- error) {
 	for {
 		select {
-		case data := <-v.sendChan:
-			if err := v.vchanWriter.Write(data); err != nil {
-				log.Errorf("Failed write to vchan: %v", aoserrors.Wrap(err))
+		case data := <-sendChan:
+			if err := vchan.WriteMessage(data); err != nil {
+				errCh <- err
 
 				return
 			}
@@ -217,33 +225,39 @@ func (v *VChanManager) writer(ctx context.Context) {
 	}
 }
 
-func (v *VChanManager) reader(ctx context.Context) {
+func (v *VChanManager) reader(ctx context.Context, vchan VChanItf, errCh chan<- error) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
 		default:
-			buffer, err := v.vchanReader.Read()
+			buffer, err := vchan.ReadMessage()
 			if err != nil {
-				if errors.Is(err, ErrContextCanceled) {
-					return
-				}
-
-				log.Errorf("Failed read from vchan: %v", err)
-
 				if errors.Is(err, ErrChecksumFailed) {
+					log.Error("Failed to validate checksum")
+
 					continue
 				}
+
+				errCh <- err
 
 				return
 			}
 
 			if request, ok := v.isImageContentRequest(buffer); ok {
 				go func() {
-					v.download(
+					if err := v.download(
 						request.ImageContentRequest.Url, request.ImageContentRequest.RequestId,
-						request.ImageContentRequest.ContentType, ctx)
+						request.ImageContentRequest.ContentType, vchan, ctx); err != nil {
+						if errors.Is(err, errVChanWrite) {
+							errCh <- err
+
+							return
+						}
+
+						log.Errorf("Failed to download image content: %v", err)
+					}
 				}()
 
 				continue
@@ -260,16 +274,14 @@ func (v *VChanManager) reader(ctx context.Context) {
 	}
 }
 
-func (v *VChanManager) download(url string, requestID uint64, contentType string, ctx context.Context) {
+func (v *VChanManager) download(
+	url string, requestID uint64, contentType string, vchan VChanItf, ctx context.Context,
+) error {
 	fileName, err := v.downloadManager.Download(ctx, url)
 	if err != nil {
 		log.Errorf("Failed to download image content: %v", aoserrors.Wrap(err))
 
-		if err := v.sendFailedImageContentResponse(requestID, err); err != nil {
-			log.Errorf("Failed to send failed image content response: %v", err)
-		}
-
-		return
+		return v.sendFailedImageContentResponse(requestID, vchan, err)
 	}
 
 	log.Debugf("Downloaded file: %s", fileName)
@@ -278,31 +290,25 @@ func (v *VChanManager) download(url string, requestID uint64, contentType string
 	if err != nil {
 		log.Errorf("Failed chunk file: %v", err)
 
-		if err := v.sendFailedImageContentResponse(requestID, err); err != nil {
-			log.Errorf("Failed to send failed image content response: %v", err)
-		}
-
-		return
+		return v.sendFailedImageContentResponse(requestID, vchan, err)
 	}
 
-	if err := v.sendImageContentInfo(imageContentInfo, imagesContent); err != nil {
-		log.Errorf("Failed to send image content: %v", err)
-	}
+	return v.sendImageContentInfo(imageContentInfo, imagesContent, vchan)
 }
 
 func (v *VChanManager) sendImageContentInfo(
-	imageContentInfo *pb.ImageContentInfo, imagesContent []*pb.ImageContent,
+	imageContentInfo *pb.ImageContentInfo, imagesContent []*pb.ImageContent, vchan VChanItf,
 ) error {
 	if err := v.sendImageContent(&pb.SMIncomingMessages{SMIncomingMessage: &pb.SMIncomingMessages_ImageContentInfo{
 		ImageContentInfo: imageContentInfo,
-	}}); err != nil {
+	}}, vchan); err != nil {
 		return err
 	}
 
 	for _, imageContent := range imagesContent {
 		if err := v.sendImageContent(&pb.SMIncomingMessages{SMIncomingMessage: &pb.SMIncomingMessages_ImageContent{
 			ImageContent: imageContent,
-		}}); err != nil {
+		}}, vchan); err != nil {
 			return err
 		}
 	}
@@ -368,7 +374,7 @@ func convertImageContentToPb(content []filechunker.ImageContent) []*pb.ImageCont
 	return imageContent
 }
 
-func (v *VChanManager) sendFailedImageContentResponse(requestID uint64, err error) error {
+func (v *VChanManager) sendFailedImageContentResponse(requestID uint64, vchan VChanItf, err error) error {
 	imageContentInfo := &pb.SMIncomingMessages{SMIncomingMessage: &pb.SMIncomingMessages_ImageContentInfo{
 		ImageContentInfo: &pb.ImageContentInfo{
 			RequestId: requestID,
@@ -381,16 +387,24 @@ func (v *VChanManager) sendFailedImageContentResponse(requestID uint64, err erro
 		return aoserrors.Wrap(err)
 	}
 
-	return aoserrors.Wrap(v.vchanWriter.Write(data))
+	if err := vchan.WriteMessage(data); err != nil {
+		return fmt.Errorf("%w: %v", errVChanWrite, err)
+	}
+
+	return nil
 }
 
-func (v *VChanManager) sendImageContent(imageMessage *pb.SMIncomingMessages) error {
+func (v *VChanManager) sendImageContent(imageMessage *pb.SMIncomingMessages, vchan VChanItf) error {
 	data, err := proto.Marshal(imageMessage)
 	if err != nil {
 		return aoserrors.Wrap(err)
 	}
 
-	return aoserrors.Wrap(v.vchanWriter.Write(data))
+	if err := vchan.WriteMessage(data); err != nil {
+		return fmt.Errorf("%w: %v", errVChanWrite, err)
+	}
+
+	return nil
 }
 
 func (v *VChanManager) isImageContentRequest(data []byte) (*pb.SMOutgoingMessages_ImageContentRequest, bool) {
@@ -406,4 +420,19 @@ func (v *VChanManager) isImageContentRequest(data []byte) (*pb.SMOutgoingMessage
 	imageRequest, ok := outgoingMessage.GetSMOutgoingMessage().(*pb.SMOutgoingMessages_ImageContentRequest)
 
 	return imageRequest, ok
+}
+
+func isPublicMessage(data []byte) bool {
+	incomingMessage := &pb.SMIncomingMessages{}
+
+	err := proto.Unmarshal(data, incomingMessage)
+	if err != nil {
+		log.Errorf("Failed to unmarshal incoming message: %v", aoserrors.Wrap(err))
+
+		return false
+	}
+
+	_, ok := incomingMessage.GetSMIncomingMessage().(*pb.SMIncomingMessages_ClockSync)
+
+	return ok
 }

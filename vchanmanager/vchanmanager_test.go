@@ -22,7 +22,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
@@ -33,11 +32,10 @@ import (
 
 	"github.com/aoscloud/aos_common/aoserrors"
 	pb "github.com/aoscloud/aos_common/api/servicemanager/v3"
+	"github.com/aoscloud/aos_messageproxy/vchanmanager"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
-
-	"github.com/aoscloud/aos_messageproxy/config"
-	"github.com/aoscloud/aos_messageproxy/vchanmanager"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 /***********************************************************************************************************************
@@ -81,18 +79,18 @@ func init() {
  * Tests
  **********************************************************************************************************************/
 
-func TestReadWriteData(t *testing.T) {
-	tVchan := &testVChan{
+func TestPrivateReadWriteVchan(t *testing.T) {
+	tVchanPriv := &testVChan{
 		send: make(chan []byte, 1),
 		recv: make(chan []byte, 1),
 	}
-	vch, err := vchanmanager.New(&config.Config{
-		VChan: config.VChanConfig{
-			XsRxPath: "/tmp/xs_rx",
-			XsTxPath: "/tmp/xs_tx",
-			Domain:   1,
-		},
-	}, &testDownloader{}, nil, tVchan, tVchan)
+
+	tVchanPub := &testVChan{
+		send: make(chan []byte, 1),
+		recv: make(chan []byte, 1),
+	}
+
+	vch, err := vchanmanager.New(nil, nil, tVchanPub, tVchanPriv)
 	if err != nil {
 		t.Errorf("Can't create a new vchannel manager: %v", err)
 	}
@@ -100,27 +98,54 @@ func TestReadWriteData(t *testing.T) {
 
 	tCases := []struct {
 		name string
-		data []byte
+		data *pb.SMIncomingMessages
 	}{
 		{
 			name: "Test 1",
-			data: []byte("payload data"),
+			data: &pb.SMIncomingMessages{
+				SMIncomingMessage: &pb.SMIncomingMessages_SetUnitConfig{
+					SetUnitConfig: &pb.SetUnitConfig{
+						UnitConfig:    "UnitConfig1",
+						VendorVersion: "VendorVersion1",
+					},
+				},
+			},
 		},
 		{
 			name: "Test 2",
-			data: []byte("payload data 2"),
+			data: &pb.SMIncomingMessages{
+				SMIncomingMessage: &pb.SMIncomingMessages_SetUnitConfig{
+					SetUnitConfig: &pb.SetUnitConfig{
+						UnitConfig:    "UnitConfig1",
+						VendorVersion: "VendorVersion1",
+					},
+				},
+			},
 		},
 	}
 
 	for _, tCase := range tCases {
 		t.Run(tCase.name, func(t *testing.T) {
-			vch.GetSendingChannel() <- tCase.data
+			data, err := proto.Marshal(tCase.data)
+			if err != nil {
+				t.Errorf("Can't marshal data: %v", err)
+			}
+
+			vch.GetSendingChannel() <- data
 
 			select {
-			case recievedData := <-tVchan.send:
-				if string(recievedData) != string(tCase.data) {
-					t.Errorf("Expected data: %s, recieved data: %s", tCase.data, recievedData)
+			case receivedData := <-tVchanPriv.send:
+				incomingData := &pb.SMIncomingMessages{}
+				if err := proto.Unmarshal(receivedData, incomingData); err != nil {
+					t.Errorf("Can't unmarshal data: %v", err)
 				}
+
+				if !proto.Equal(tCase.data, incomingData) {
+					t.Errorf("Expected data: %s, received data: %s", tCase.data, incomingData)
+				}
+
+			case <-tVchanPub.send:
+				t.Errorf("Unexpected data")
 
 			case <-time.After(1 * time.Second):
 				t.Errorf("Timeout")
@@ -128,15 +153,208 @@ func TestReadWriteData(t *testing.T) {
 		})
 	}
 
-	for _, tCase := range tCases {
+	tCasesOutgoing := []struct {
+		name string
+		data *pb.SMOutgoingMessages
+	}{
+		{
+			name: "Test 1",
+			data: &pb.SMOutgoingMessages{
+				SMOutgoingMessage: &pb.SMOutgoingMessages_NodeConfiguration{
+					NodeConfiguration: &pb.NodeConfiguration{
+						NodeId:   "NodeId1",
+						NodeType: "NodeType1",
+						NumCpus:  1,
+						TotalRam: 1,
+					},
+				},
+			},
+		},
+		{
+			name: "Test 2",
+			data: &pb.SMOutgoingMessages{
+				SMOutgoingMessage: &pb.SMOutgoingMessages_NodeConfiguration{
+					NodeConfiguration: &pb.NodeConfiguration{
+						NodeId:   "NodeId2",
+						NodeType: "NodeType2",
+						NumCpus:  2,
+						TotalRam: 23,
+					},
+				},
+			},
+		},
+	}
+
+	for _, tCase := range tCasesOutgoing {
 		t.Run(tCase.name, func(t *testing.T) {
-			tVchan.recv <- tCase.data
+			data, err := proto.Marshal(tCase.data)
+			if err != nil {
+				t.Errorf("Can't marshal data: %v", err)
+			}
+
+			tVchanPriv.recv <- data
 
 			select {
-			case recievedData := <-vch.GetReceivingChannel():
-				if string(recievedData) != string(tCase.data) {
-					t.Errorf("Expected data: %s, recieved data: %s", tCase.data, recievedData)
+			case receivedData := <-vch.GetReceivingChannel():
+				outgoingData := &pb.SMOutgoingMessages{}
+				if err := proto.Unmarshal(receivedData, outgoingData); err != nil {
+					t.Errorf("Can't unmarshal data: %v", err)
 				}
+
+				if !proto.Equal(tCase.data, outgoingData) {
+					t.Errorf("Expected data: %s, received data: %s", tCase.data, outgoingData)
+				}
+
+			case <-tVchanPub.recv:
+				t.Errorf("Unexpected data")
+
+			case <-time.After(1 * time.Second):
+				t.Errorf("Timeout")
+			}
+		})
+	}
+}
+
+func TestPublicReadWriteVchan(t *testing.T) {
+	tVchanPriv := &testVChan{
+		send: make(chan []byte, 1),
+		recv: make(chan []byte, 1),
+	}
+
+	tVchanPub := &testVChan{
+		send: make(chan []byte, 1),
+		recv: make(chan []byte, 1),
+	}
+
+	vch, err := vchanmanager.New(nil, nil, tVchanPub, tVchanPriv)
+	if err != nil {
+		t.Errorf("Can't create a new vchannel manager: %v", err)
+	}
+	defer vch.Close()
+
+	tCases := []struct {
+		name string
+		data *pb.SMIncomingMessages
+	}{
+		{
+			name: "Test 1",
+			data: &pb.SMIncomingMessages{
+				SMIncomingMessage: &pb.SMIncomingMessages_ClockSync{
+					ClockSync: &pb.ClockSync{
+						CurrentTime: &timestamppb.Timestamp{
+							Seconds: 1,
+							Nanos:   1,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "Test 2",
+			data: &pb.SMIncomingMessages{
+				SMIncomingMessage: &pb.SMIncomingMessages_ClockSync{
+					ClockSync: &pb.ClockSync{
+						CurrentTime: &timestamppb.Timestamp{
+							Seconds: 2,
+							Nanos:   2,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tCase := range tCases {
+		t.Run(tCase.name, func(t *testing.T) {
+			data, err := proto.Marshal(tCase.data)
+			if err != nil {
+				t.Errorf("Can't marshal data: %v", err)
+			}
+
+			vch.GetSendingChannel() <- data
+
+			select {
+			case receivedData := <-tVchanPub.send:
+				incomingData := &pb.SMIncomingMessages{}
+				if err := proto.Unmarshal(receivedData, incomingData); err != nil {
+					t.Errorf("Can't unmarshal data: %v", err)
+				}
+
+				if !proto.Equal(tCase.data, incomingData) {
+					t.Errorf("Expected data: %s, received data: %s", tCase.data, incomingData)
+				}
+
+			case <-tVchanPriv.send:
+				t.Errorf("Unexpected data")
+
+			case <-time.After(1 * time.Second):
+				t.Errorf("Timeout")
+			}
+		})
+	}
+
+	tCasesOutgoing := []struct {
+		name string
+		data *pb.SMOutgoingMessages
+	}{
+		{
+			name: "Test 1",
+			data: &pb.SMOutgoingMessages{
+				SMOutgoingMessage: &pb.SMOutgoingMessages_NodeMonitoring{
+					NodeMonitoring: &pb.NodeMonitoring{
+						Timestamp: &timestamppb.Timestamp{
+							Seconds: 1,
+							Nanos:   1,
+						},
+						MonitoringData: &pb.MonitoringData{
+							Ram: 10,
+							Cpu: 20,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "Test 2",
+			data: &pb.SMOutgoingMessages{
+				SMOutgoingMessage: &pb.SMOutgoingMessages_NodeMonitoring{
+					NodeMonitoring: &pb.NodeMonitoring{
+						Timestamp: &timestamppb.Timestamp{
+							Seconds: 2,
+							Nanos:   2,
+						},
+						MonitoringData: &pb.MonitoringData{
+							Ram: 20,
+							Cpu: 40,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tCase := range tCasesOutgoing {
+		t.Run(tCase.name, func(t *testing.T) {
+			data, err := proto.Marshal(tCase.data)
+			if err != nil {
+				t.Errorf("Can't marshal data: %v", err)
+			}
+
+			tVchanPub.recv <- data
+
+			select {
+			case receivedData := <-vch.GetReceivingChannel():
+				outgoingData := &pb.SMOutgoingMessages{}
+				if err := proto.Unmarshal(receivedData, outgoingData); err != nil {
+					t.Errorf("Can't unmarshal data: %v", err)
+				}
+
+				if !proto.Equal(tCase.data, outgoingData) {
+					t.Errorf("Expected data: %s, received data: %s", tCase.data, outgoingData)
+				}
+
+			case <-tVchanPriv.recv:
+				t.Errorf("Unexpected data")
 
 			case <-time.After(1 * time.Second):
 				t.Errorf("Timeout")
@@ -146,12 +364,17 @@ func TestReadWriteData(t *testing.T) {
 }
 
 func TestDownload(t *testing.T) {
-	tVchan := &testVChan{
+	tVchanPriv := &testVChan{
 		send: make(chan []byte, 1),
 		recv: make(chan []byte, 1),
 	}
 
-	tmpDir, err := ioutil.TempDir("", "vchan_")
+	tVchanPub := &testVChan{
+		send: make(chan []byte, 1),
+		recv: make(chan []byte, 1),
+	}
+
+	tmpDir, err := os.MkdirTemp("", "vchan_")
 	if err != nil {
 		t.Fatalf("Can't create a temp dir: %v", err)
 	}
@@ -163,17 +386,11 @@ func TestDownload(t *testing.T) {
 		t.Fatalf("Can't generate file: %v", err)
 	}
 
-	vch, err := vchanmanager.New(&config.Config{
-		VChan: config.VChanConfig{
-			XsRxPath: "/tmp/xs_rx",
-			XsTxPath: "/tmp/xs_tx",
-			Domain:   1,
-		},
-	}, &testDownloader{
+	vch, err := vchanmanager.New(&testDownloader{
 		downloadedFile: fileName,
 	}, &testUnpacker{
 		filePath: tmpDir,
-	}, tVchan, tVchan)
+	}, tVchanPub, tVchanPriv)
 	if err != nil {
 		t.Errorf("Can't create a new communication manager: %v", err)
 	}
@@ -196,7 +413,7 @@ func TestDownload(t *testing.T) {
 
 	data := make([]byte, 1*Kilobyte)
 
-	if data, err = ioutil.ReadAll(file); err != nil {
+	if data, err = io.ReadAll(file); err != nil {
 		t.Fatalf("Can't read file: %v", err)
 	}
 
@@ -224,7 +441,7 @@ func TestDownload(t *testing.T) {
 		t.Fatalf("Can't marshal data: %v", err)
 	}
 
-	tVchan.recv <- imageContentRequestRaw
+	tVchanPriv.recv <- imageContentRequestRaw
 
 	tCases := []struct {
 		name string
@@ -266,7 +483,7 @@ func TestDownload(t *testing.T) {
 	for _, tCase := range tCases {
 		t.Run(tCase.name, func(t *testing.T) {
 			select {
-			case recievedData := <-tVchan.send:
+			case recievedData := <-tVchanPriv.send:
 				data, err := proto.Marshal(tCase.data)
 				if err != nil {
 					t.Errorf("Can't marshal data: %v", err)
@@ -275,6 +492,9 @@ func TestDownload(t *testing.T) {
 				if !bytes.Equal(recievedData, data) {
 					t.Error("Unexpected received data")
 				}
+
+			case <-tVchanPub.send:
+				t.Errorf("Unexpected data")
 
 			case <-time.After(6 * time.Second):
 				t.Errorf("Timeout")
@@ -287,21 +507,22 @@ func TestDownload(t *testing.T) {
  * Interfaces
  **********************************************************************************************************************/
 
-func (v *testVChan) Init(domain int, xsPath string) error {
+func (v *testVChan) Connect(ctx context.Context) error {
 	return nil
 }
 
-func (v *testVChan) Read() ([]byte, error) {
+func (v *testVChan) ReadMessage() ([]byte, error) {
 	return <-v.recv, nil
 }
 
-func (v *testVChan) Write(data []byte) error {
+func (v *testVChan) WriteMessage(data []byte) error {
 	v.send <- data
 
 	return nil
 }
 
-func (v *testVChan) Close() {
+func (v *testVChan) Disconnect() error {
+	return nil
 }
 
 func (td *testDownloader) Download(
