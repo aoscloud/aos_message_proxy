@@ -20,7 +20,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -87,7 +87,8 @@ func main() {
 
 	if *useJournal {
 		log.AddHook(newJournalHook())
-		log.SetOutput(ioutil.Discard)
+		log.SetOutput(io.Discard)
+
 	} else {
 		log.SetOutput(os.Stdout)
 	}
@@ -124,8 +125,13 @@ func main() {
 		return
 	}
 
-	vch, err := vchanmanager.New(
-		config, downloadmanager, unpackmanager, vchanmanager.NewVChan(), vchanmanager.NewVChan())
+	vchanPub := vchanmanager.NewVChan(config.VChan.XsRxPubPath, config.VChan.XsTxPubPath, config.VChan.Domain, nil)
+	defer vchanPub.Close()
+
+	vchanPriv := vchanmanager.NewVChan(config.VChan.XsRxPrivPath, config.VChan.XsTxPrivPath, config.VChan.Domain, nil)
+	defer vchanPriv.Close()
+
+	vch, err := vchanmanager.New(downloadmanager, unpackmanager, vchanPub, vchanPriv)
 	if err != nil {
 		log.Fatalf("Can't create vchanmanager: %s", err)
 
