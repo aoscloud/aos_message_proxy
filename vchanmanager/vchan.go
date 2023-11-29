@@ -21,8 +21,11 @@ package vchanmanager
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
-	"fmt"
+	"crypto/tls"
+	"net"
+	"time"
 	"unsafe"
 
 	"github.com/aoscloud/aos_common/aoserrors"
@@ -61,49 +64,72 @@ const headerSize = C.size_t(unsafe.Sizeof(C.struct_VChanMessageHeader{}))
  * Types
  **********************************************************************************************************************/
 
+type connection struct {
+	vchanReader *C.struct_libxenvchan
+	vchanWriter *C.struct_libxenvchan
+}
+
 // VChan vchan implementation.
 type VChan struct {
-	vchan *C.struct_libxenvchan
+	conn       net.Conn
+	mTLSConfig *tls.Config
+	xsRxPath   string
+	xsTxPath   string
+	domain     int
 }
 
 /***********************************************************************************************************************
  * Vars
  **********************************************************************************************************************/
 
-var errUnexpectedNumberBytes = fmt.Errorf("unexpected number of bytes")
+var errUnexpectedNumberBytes = aoserrors.Errorf("unexpected number of bytes")
 
 /***********************************************************************************************************************
  * Public
  **********************************************************************************************************************/
 
 // New creates new vchan instance.
-func NewVChan() *VChan {
-	return &VChan{}
+func NewVChan(xsRxPath string, xsTxPath string, domain int, mTLSConfig *tls.Config) *VChan {
+	return &VChan{
+		mTLSConfig: mTLSConfig,
+		xsRxPath:   xsRxPath,
+		xsTxPath:   xsTxPath,
+		domain:     domain,
+	}
 }
 
 // Close closes vchan.
-func (v *VChan) Close() {
-	C.libxenvchan_close(v.vchan)
+func (v *VChan) Close() error {
+	if v.conn == nil {
+		return nil
+	}
+
+	return aoserrors.Wrap(v.conn.Close())
 }
 
-// Init initializes vchan.
-func (v *VChan) Init(domain int, xsPath string) (err error) {
-	cstr := C.CString(xsPath)
-	defer C.free(unsafe.Pointer(cstr))
-
-	// To address Golang's inability to access bitfields in C structures,
-	// it is necessary to use server_init() instead of libxenvchan_server_init().
-
-	v.vchan, err = C.server_init(C.int(domain), cstr)
-	if v.vchan == nil {
-		return aoserrors.Errorf("libxenvchan_server_init failed: %v", err)
+// Connect connects to vchan.
+func (v *VChan) Connect(ctx context.Context) (err error) {
+	if v.conn, err = v.newConnection(); err != nil {
+		return err
 	}
+
+	if v.mTLSConfig == nil {
+		return nil
+	}
+
+	tlsConn := tls.Server(v.conn, v.mTLSConfig)
+
+	if err := tlsConn.HandshakeContext(ctx); err != nil {
+		return aoserrors.Errorf("tls handshake failed: %v", err)
+	}
+
+	v.conn = tlsConn
 
 	return nil
 }
 
-// Read reads data from vchan.
-func (v *VChan) Read() (data []byte, err error) {
+// ReadMessage reads data from vchan.
+func (v *VChan) ReadMessage() (data []byte, err error) {
 	buffer, err := v.readVchan(headerSize)
 	if err != nil {
 		return nil, err
@@ -111,7 +137,7 @@ func (v *VChan) Read() (data []byte, err error) {
 
 	header := (*C.struct_VChanMessageHeader)(unsafe.Pointer(&buffer[0]))
 
-	if buffer, err = v.readVchan(C.size_t(header.mDataSize)); err != nil {
+	if buffer, err = v.readVchan(header.mDataSize); err != nil {
 		return nil, err
 	}
 
@@ -125,16 +151,71 @@ func (v *VChan) Read() (data []byte, err error) {
 	return buffer, nil
 }
 
-// Write writes data to vchan.
-func (v *VChan) Write(data []byte) (err error) {
-	if err := v.writeVchan(prepareHeader(data)); err != nil {
+// WriteMessage writes data to vchan.
+func (v *VChan) WriteMessage(data []byte) (err error) {
+	if err = v.writeVchan(prepareHeader(data)); err != nil {
 		return err
 	}
 
-	if err := v.writeVchan(data); err != nil {
+	if err = v.writeVchan(data); err != nil {
 		return err
 	}
 
+	return nil
+}
+
+// Disconnect disconnects from vchan.
+func (v *VChan) Disconnect() error {
+	return v.Close()
+}
+
+/***********************************************************************************************************************
+ * Interfaces
+ **********************************************************************************************************************/
+
+func (vc *connection) Read(buffer []byte) (int, error) {
+	bufferSize := C.size_t(len(buffer))
+
+	n, errno := C.libxenvchan_recv(vc.vchanReader, unsafe.Pointer(&buffer[0]), bufferSize)
+
+	return int(n), errno
+}
+
+func (vc *connection) Write(buffer []byte) (int, error) {
+	n, errno := C.libxenvchan_send(vc.vchanWriter, unsafe.Pointer(&buffer[0]), C.size_t(len(buffer)))
+
+	return int(n), errno
+}
+
+func (vc *connection) Close() error {
+	if vc.vchanReader != nil {
+		C.libxenvchan_close(vc.vchanReader)
+	}
+
+	if vc.vchanWriter != nil {
+		C.libxenvchan_close(vc.vchanWriter)
+	}
+
+	return nil
+}
+
+func (vc *connection) LocalAddr() net.Addr {
+	return nil
+}
+
+func (vc *connection) RemoteAddr() net.Addr {
+	return nil
+}
+
+func (vc *connection) SetDeadline(t time.Time) error {
+	return nil
+}
+
+func (vc *connection) SetReadDeadline(t time.Time) error {
+	return nil
+}
+
+func (vc *connection) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
@@ -142,15 +223,53 @@ func (v *VChan) Write(data []byte) (err error) {
  * Private
  **********************************************************************************************************************/
 
-func (v *VChan) readVchan(buffSize C.size_t) ([]byte, error) {
-	buffer := make([]byte, buffSize)
+func (v *VChan) newConnection() (conn *connection, err error) {
+	defer func() {
+		if err != nil {
+			v.Close()
+		}
+	}()
 
-	n, errno := C.libxenvchan_recv(v.vchan, unsafe.Pointer(&buffer[0]), buffSize)
-	if n < 0 {
-		return nil, aoserrors.Errorf("libxenvchan_recv failed: %v", errno)
+	vchanReader, err := v.initVchan(v.domain, v.xsRxPath)
+	if err != nil {
+		return nil, err
 	}
 
-	if n != C.int(buffSize) {
+	vchanWriter, err := v.initVchan(v.domain, v.xsTxPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return &connection{
+		vchanReader: vchanReader,
+		vchanWriter: vchanWriter,
+	}, nil
+}
+
+func (v *VChan) initVchan(domain int, xsPath string) (*C.struct_libxenvchan, error) {
+	cstr := C.CString(xsPath)
+	defer C.free(unsafe.Pointer(cstr))
+
+	// To address Golang's inability to access bitfields in C structures,
+	// it is necessary to use server_init() instead of libxenvchan_server_init().
+
+	vchan, err := C.libxenvchan_server_init(nil, C.int(domain), cstr, 0, 0)
+	if vchan == nil {
+		return nil, aoserrors.Errorf("libxenvchan_server_init failed: %v", err)
+	}
+
+	return vchan, nil
+}
+
+func (v *VChan) readVchan(buffSize int) ([]byte, error) {
+	buffer := make([]byte, buffSize)
+
+	n, err := v.conn.Read(buffer)
+	if err != nil {
+		return nil, aoserrors.Wrap(err)
+	}
+
+	if n != buffSize {
 		return nil, aoserrors.Wrap(errUnexpectedNumberBytes)
 	}
 
@@ -158,12 +277,12 @@ func (v *VChan) readVchan(buffSize C.size_t) ([]byte, error) {
 }
 
 func (v *VChan) writeVchan(buffer []byte) error {
-	n, errno := C.libxenvchan_send(v.vchan, unsafe.Pointer(&buffer[0]), C.size_t(len(buffer)))
-	if n < 0 {
-		return aoserrors.Errorf("libxenvchan_send failed: %v", errno)
+	n, err := v.conn.Write(buffer)
+	if err != nil {
+		return aoserrors.Wrap(err)
 	}
 
-	if n != C.int(len(buffer)) {
+	if n != len(buffer) {
 		return aoserrors.Wrap(errUnexpectedNumberBytes)
 	}
 
