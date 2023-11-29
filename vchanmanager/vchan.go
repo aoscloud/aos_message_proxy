@@ -145,7 +145,7 @@ func (v *VChan) ReadMessage() (data []byte, err error) {
 
 	sha256Payload := sha256.Sum256(buffer)
 	if !bytes.Equal(sha256Payload[:], recievedSha256) {
-		return nil, ErrChecksumFailed
+		return nil, errChecksumFailed
 	}
 
 	return buffer, nil
