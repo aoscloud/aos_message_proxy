@@ -125,8 +125,13 @@ func main() {
 		return
 	}
 
-	vch, err := vchanmanager.New(
-		config, downloadmanager, unpackmanager, vchanmanager.NewVChan(), vchanmanager.NewVChan())
+	vchanPub := vchanmanager.NewVChan(config.VChan.XsRxPubPath, config.VChan.XsTxPubPath, config.VChan.Domain, nil)
+	defer vchanPub.Close()
+
+	vchanPriv := vchanmanager.NewVChan(config.VChan.XsRxPrivPath, config.VChan.XsTxPrivPath, config.VChan.Domain, nil)
+	defer vchanPriv.Close()
+
+	vch, err := vchanmanager.New(downloadmanager, unpackmanager, vchanPub, vchanPriv)
 	if err != nil {
 		log.Fatalf("Can't create vchanmanager: %s", err)
 
@@ -136,7 +141,7 @@ func main() {
 
 	cryptoContext, err := cryptutils.NewCryptoContext(config.CACert)
 	if err != nil {
-		log.Fatalf("Can't create crypto context: %s", err) //nolint:gocritic
+		log.Errorf("Can't create crypto context: %v", err)
 
 		return
 	}
@@ -144,7 +149,7 @@ func main() {
 
 	iam, err := iamclient.New(config, cryptoContext, false)
 	if err != nil {
-		log.Fatalf("Can't create iam client: %s", err)
+		log.Errorf("Can't create iam client: %v", err)
 
 		return
 	}
