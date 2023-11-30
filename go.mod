@@ -5,7 +5,7 @@ go 1.19
 replace github.com/ThalesIgnite/crypto11 => github.com/aoscloud/crypto11 v1.0.3-0.20220217163524-ddd0ace39e6f
 
 require (
-	github.com/aoscloud/aos_common v0.0.0-20230309143149-2a708eb7732b
+	github.com/aoscloud/aos_common v0.0.0-20231116094808-68e7b1b5c778
 	github.com/cavaliergopher/grab/v3 v3.0.1
 	github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e
 	github.com/golang/protobuf v1.5.2
