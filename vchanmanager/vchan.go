@@ -111,11 +111,11 @@ func (v *VChan) Read() (data []byte, err error) {
 
 	header := (*C.struct_VChanMessageHeader)(unsafe.Pointer(&buffer[0]))
 
-	if buffer, err = v.readVchan(C.size_t(header.dataSize)); err != nil {
+	if buffer, err = v.readVchan(C.size_t(header.mDataSize)); err != nil {
 		return nil, err
 	}
 
-	recievedSha256 := C.GoBytes(unsafe.Pointer(&header.sha256[0]), C.int(sha256.Size)) //nolint:gocritic
+	recievedSha256 := C.GoBytes(unsafe.Pointer(&header.mSha256[0]), C.int(sha256.Size)) //nolint:gocritic
 
 	sha256Payload := sha256.Sum256(buffer)
 	if !bytes.Equal(sha256Payload[:], recievedSha256) {
@@ -172,14 +172,14 @@ func (v *VChan) writeVchan(buffer []byte) error {
 
 func prepareHeader(data []byte) []byte {
 	header := C.struct_VChanMessageHeader{
-		dataSize: C.uint32_t(len(data)),
+		mDataSize: C.uint32_t(len(data)),
 	}
 
 	sha256Payload := sha256.Sum256(data)
 
 	//nolint:gocritic
 	C.memcpy(unsafe.Pointer(
-		&header.sha256[0]), unsafe.Pointer(&sha256Payload[0]), C.size_t(len(sha256Payload)))
+		&header.mSha256[0]), unsafe.Pointer(&sha256Payload[0]), C.size_t(len(sha256Payload)))
 
 	return (*[headerSize]byte)(unsafe.Pointer(&header))[:]
 }
