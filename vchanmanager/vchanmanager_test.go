@@ -26,13 +26,16 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/aoscloud/aos_common/aoserrors"
+	pbIAM "github.com/aoscloud/aos_common/api/iamanager/v4"
 	pb "github.com/aoscloud/aos_common/api/servicemanager/v3"
 	"github.com/aoscloud/aos_messageproxy/vchanmanager"
+	"github.com/golang/protobuf/ptypes/empty"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -57,8 +60,8 @@ type testUnpacker struct {
 }
 
 type testVChan struct {
-	send chan []byte
-	recv chan []byte
+	send chan vchanmanager.Message
+	recv chan vchanmanager.Message
 }
 
 /***********************************************************************************************************************
@@ -81,13 +84,13 @@ func init() {
 
 func TestPrivateReadWriteVchan(t *testing.T) {
 	tVchanPriv := &testVChan{
-		send: make(chan []byte, 1),
-		recv: make(chan []byte, 1),
+		send: make(chan vchanmanager.Message, 1),
+		recv: make(chan vchanmanager.Message, 1),
 	}
 
 	tVchanPub := &testVChan{
-		send: make(chan []byte, 1),
-		recv: make(chan []byte, 1),
+		send: make(chan vchanmanager.Message, 1),
+		recv: make(chan vchanmanager.Message, 1),
 	}
 
 	vch, err := vchanmanager.New(nil, nil, tVchanPub, tVchanPriv)
@@ -131,12 +134,18 @@ func TestPrivateReadWriteVchan(t *testing.T) {
 				t.Errorf("Can't marshal data: %v", err)
 			}
 
-			vch.GetSendingChannel() <- data
+			if err = vch.SendSMMessage(data); err != nil {
+				t.Errorf("Can't send data: %v", err)
+			}
 
 			select {
 			case receivedData := <-tVchanPriv.send:
+				if receivedData.MsgSource != vchanmanager.SM {
+					t.Errorf("Wrong message source: %d", receivedData.MsgSource)
+				}
+
 				incomingData := &pb.SMIncomingMessages{}
-				if err := proto.Unmarshal(receivedData, incomingData); err != nil {
+				if err := proto.Unmarshal(receivedData.Data, incomingData); err != nil {
 					t.Errorf("Can't unmarshal data: %v", err)
 				}
 
@@ -192,10 +201,13 @@ func TestPrivateReadWriteVchan(t *testing.T) {
 				t.Errorf("Can't marshal data: %v", err)
 			}
 
-			tVchanPriv.recv <- data
+			tVchanPriv.recv <- vchanmanager.Message{
+				MsgSource: vchanmanager.SM,
+				Data:      data,
+			}
 
 			select {
-			case receivedData := <-vch.GetReceivingChannel():
+			case receivedData := <-vch.ReceiveSMMessage():
 				outgoingData := &pb.SMOutgoingMessages{}
 				if err := proto.Unmarshal(receivedData, outgoingData); err != nil {
 					t.Errorf("Can't unmarshal data: %v", err)
@@ -217,13 +229,13 @@ func TestPrivateReadWriteVchan(t *testing.T) {
 
 func TestPublicReadWriteVchan(t *testing.T) {
 	tVchanPriv := &testVChan{
-		send: make(chan []byte, 1),
-		recv: make(chan []byte, 1),
+		send: make(chan vchanmanager.Message, 1),
+		recv: make(chan vchanmanager.Message, 1),
 	}
 
 	tVchanPub := &testVChan{
-		send: make(chan []byte, 1),
-		recv: make(chan []byte, 1),
+		send: make(chan vchanmanager.Message, 1),
+		recv: make(chan vchanmanager.Message, 1),
 	}
 
 	vch, err := vchanmanager.New(nil, nil, tVchanPub, tVchanPriv)
@@ -271,12 +283,18 @@ func TestPublicReadWriteVchan(t *testing.T) {
 				t.Errorf("Can't marshal data: %v", err)
 			}
 
-			vch.GetSendingChannel() <- data
+			if err = vch.SendSMMessage(data); err != nil {
+				t.Errorf("Can't send data: %v", err)
+			}
 
 			select {
 			case receivedData := <-tVchanPub.send:
+				if receivedData.MsgSource != vchanmanager.SM {
+					t.Errorf("Wrong message source: %d", receivedData.MsgSource)
+				}
+
 				incomingData := &pb.SMIncomingMessages{}
-				if err := proto.Unmarshal(receivedData, incomingData); err != nil {
+				if err := proto.Unmarshal(receivedData.Data, incomingData); err != nil {
 					t.Errorf("Can't unmarshal data: %v", err)
 				}
 
@@ -340,10 +358,13 @@ func TestPublicReadWriteVchan(t *testing.T) {
 				t.Errorf("Can't marshal data: %v", err)
 			}
 
-			tVchanPub.recv <- data
+			tVchanPub.recv <- vchanmanager.Message{
+				MsgSource: vchanmanager.SM,
+				Data:      data,
+			}
 
 			select {
-			case receivedData := <-vch.GetReceivingChannel():
+			case receivedData := <-vch.ReceiveSMMessage():
 				outgoingData := &pb.SMOutgoingMessages{}
 				if err := proto.Unmarshal(receivedData, outgoingData); err != nil {
 					t.Errorf("Can't unmarshal data: %v", err)
@@ -365,13 +386,13 @@ func TestPublicReadWriteVchan(t *testing.T) {
 
 func TestDownload(t *testing.T) {
 	tVchanPriv := &testVChan{
-		send: make(chan []byte, 1),
-		recv: make(chan []byte, 1),
+		send: make(chan vchanmanager.Message, 1),
+		recv: make(chan vchanmanager.Message, 1),
 	}
 
 	tVchanPub := &testVChan{
-		send: make(chan []byte, 1),
-		recv: make(chan []byte, 1),
+		send: make(chan vchanmanager.Message, 1),
+		recv: make(chan vchanmanager.Message, 1),
 	}
 
 	tmpDir, err := os.MkdirTemp("", "vchan_")
@@ -441,7 +462,10 @@ func TestDownload(t *testing.T) {
 		t.Fatalf("Can't marshal data: %v", err)
 	}
 
-	tVchanPriv.recv <- imageContentRequestRaw
+	tVchanPriv.recv <- vchanmanager.Message{
+		MsgSource: vchanmanager.SM,
+		Data:      imageContentRequestRaw,
+	}
 
 	tCases := []struct {
 		name string
@@ -484,12 +508,16 @@ func TestDownload(t *testing.T) {
 		t.Run(tCase.name, func(t *testing.T) {
 			select {
 			case recievedData := <-tVchanPriv.send:
+				if recievedData.MsgSource != vchanmanager.SM {
+					t.Errorf("Wrong message source: %d", recievedData.MsgSource)
+				}
+
 				data, err := proto.Marshal(tCase.data)
 				if err != nil {
 					t.Errorf("Can't marshal data: %v", err)
 				}
 
-				if !bytes.Equal(recievedData, data) {
+				if !bytes.Equal(recievedData.Data, data) {
 					t.Error("Unexpected received data")
 				}
 
@@ -503,6 +531,333 @@ func TestDownload(t *testing.T) {
 	}
 }
 
+func TestIAMProvisioning(t *testing.T) {
+	tVchanPriv := &testVChan{
+		send: make(chan vchanmanager.Message, 1),
+		recv: make(chan vchanmanager.Message, 1),
+	}
+
+	tVchanPub := &testVChan{
+		send: make(chan vchanmanager.Message, 1),
+		recv: make(chan vchanmanager.Message, 1),
+	}
+
+	vch, err := vchanmanager.New(nil, nil, tVchanPub, tVchanPriv)
+	if err != nil {
+		t.Errorf("Can't create a new vchannel manager: %v", err)
+	}
+	defer vch.Close()
+
+	// GetAllNodeIDs
+
+	nodeIDs := []string{"test1", "test2"}
+
+	go func() {
+		reqData := <-tVchanPriv.send
+		if reqData.MsgSource != vchanmanager.IAM {
+			t.Errorf("Wrong message source: %d", reqData.MsgSource)
+		}
+
+		if reqData.MethodName != "/iamanager.v4.IAMProvisioningService/GetAllNodeIDs" {
+			t.Errorf("Wrong method name: %s", reqData.MethodName)
+		}
+
+		rsp := &pbIAM.NodesID{
+			Ids: nodeIDs,
+		}
+
+		data, err := proto.Marshal(rsp)
+		if err != nil {
+			t.Errorf("Can't marshal data: %v", err)
+		}
+
+		tVchanPriv.recv <- vchanmanager.Message{
+			MsgSource: vchanmanager.IAM,
+			Data:      data,
+		}
+	}()
+
+	rspNodeIDs, err := vch.GetAllNodeIDs(context.Background(), &empty.Empty{})
+	if err != nil {
+		t.Errorf("Can't get node IDs: %v", err)
+	}
+
+	if !reflect.DeepEqual(rspNodeIDs.GetIds(), nodeIDs) {
+		t.Errorf("Wrong node IDs: %v", rspNodeIDs.GetIds())
+	}
+
+	// GetCertTypes
+
+	certTypes := []string{"test1", "test2"}
+
+	go func() {
+		reqData := <-tVchanPriv.send
+		if reqData.MsgSource != vchanmanager.IAM {
+			t.Errorf("Wrong message source: %d", reqData.MsgSource)
+		}
+
+		if reqData.MethodName != "/iamanager.v4.IAMProvisioningService/GetCertTypes" {
+			t.Errorf("Wrong method name: %s", reqData.MethodName)
+		}
+
+		req := &pbIAM.GetCertTypesRequest{}
+		if err := proto.Unmarshal(reqData.Data, req); err != nil {
+			t.Errorf("Can't unmarshal data: %v", err)
+		}
+
+		rspCertTypes := &pbIAM.CertTypes{
+			Types: certTypes,
+		}
+
+		data, err := proto.Marshal(rspCertTypes)
+		if err != nil {
+			t.Errorf("Can't marshal data: %v", err)
+		}
+
+		tVchanPriv.recv <- vchanmanager.Message{
+			MsgSource: vchanmanager.IAM,
+			Data:      data,
+		}
+	}()
+
+	rspCertTypes, err := vch.GetCertTypes(context.Background(), &pbIAM.GetCertTypesRequest{})
+	if err != nil {
+		t.Errorf("Can't get cert types: %v", err)
+	}
+
+	if !reflect.DeepEqual(rspCertTypes.GetTypes(), certTypes) {
+		t.Errorf("Wrong cert types: %v", rspCertTypes.GetTypes())
+	}
+
+	// SetOwner
+
+	password := "password"
+
+	setOwnerReq := &pbIAM.SetOwnerRequest{Type: "online", Password: password}
+
+	if _, err := vch.SetOwner(context.Background(), setOwnerReq); err != nil {
+		t.Errorf("Can't set owner: %v", err)
+	}
+
+	select {
+	case receivedData := <-tVchanPriv.send:
+		if receivedData.MsgSource != vchanmanager.IAM {
+			t.Errorf("Wrong message source: %d", receivedData.MsgSource)
+		}
+
+		if receivedData.MethodName != "/iamanager.v4.IAMProvisioningService/SetOwner" {
+			t.Errorf("Wrong method name: %s", receivedData.MethodName)
+		}
+
+		incomingData := &pbIAM.SetOwnerRequest{}
+		if err := proto.Unmarshal(receivedData.Data, incomingData); err != nil {
+			t.Errorf("Can't unmarshal data: %v", err)
+		}
+
+		if !proto.Equal(setOwnerReq, incomingData) {
+			t.Errorf("Expected data: %s, received data: %s", setOwnerReq, incomingData)
+		}
+
+	case <-tVchanPub.send:
+		t.Errorf("Unexpected data")
+
+	case <-time.After(1 * time.Second):
+		t.Errorf("Timeout")
+	}
+
+	// Clear
+
+	clearReq := &pbIAM.ClearRequest{Type: "online"}
+
+	if _, err := vch.Clear(context.Background(), clearReq); err != nil {
+		t.Errorf("Can't clear: %v", err)
+	}
+
+	select {
+	case receivedData := <-tVchanPriv.send:
+		if receivedData.MsgSource != vchanmanager.IAM {
+			t.Errorf("Wrong message source: %d", receivedData.MsgSource)
+		}
+
+		if receivedData.MethodName != "/iamanager.v4.IAMProvisioningService/Clear" {
+			t.Errorf("Wrong method name: %s", receivedData.MethodName)
+		}
+
+		incomingData := &pbIAM.ClearRequest{}
+		if err := proto.Unmarshal(receivedData.Data, incomingData); err != nil {
+			t.Errorf("Can't unmarshal data: %v", err)
+		}
+
+		if !proto.Equal(clearReq, incomingData) {
+			t.Errorf("Expected data: %s, received data: %s", clearReq, incomingData)
+		}
+
+	case <-tVchanPub.send:
+		t.Errorf("Unexpected data")
+
+	case <-time.After(1 * time.Second):
+		t.Errorf("Timeout")
+	}
+
+	// EncryptDisk
+
+	encryptReq := &pbIAM.EncryptDiskRequest{Password: password}
+
+	if _, err := vch.EncryptDisk(context.Background(), encryptReq); err != nil {
+		t.Errorf("Can't encrypt: %v", err)
+	}
+
+	select {
+	case receivedData := <-tVchanPriv.send:
+		if receivedData.MsgSource != vchanmanager.IAM {
+			t.Errorf("Wrong message source: %d", receivedData.MsgSource)
+		}
+
+		if receivedData.MethodName != "/iamanager.v4.IAMProvisioningService/EncryptDisk" {
+			t.Errorf("Wrong method name: %s", receivedData.MethodName)
+		}
+
+		incomingData := &pbIAM.EncryptDiskRequest{}
+
+		if err := proto.Unmarshal(receivedData.Data, incomingData); err != nil {
+			t.Errorf("Can't unmarshal data: %v", err)
+		}
+
+		if !proto.Equal(encryptReq, incomingData) {
+			t.Errorf("Expected data: %s, received data: %s", encryptReq, incomingData)
+		}
+
+	case <-tVchanPub.send:
+		t.Errorf("Unexpected data")
+
+	case <-time.After(1 * time.Second):
+		t.Errorf("Timeout")
+	}
+}
+
+func TestCertificateService(t *testing.T) {
+	tVchanPriv := &testVChan{
+		send: make(chan vchanmanager.Message, 1),
+		recv: make(chan vchanmanager.Message, 1),
+	}
+
+	tVchanPub := &testVChan{
+		send: make(chan vchanmanager.Message, 1),
+		recv: make(chan vchanmanager.Message, 1),
+	}
+
+	vch, err := vchanmanager.New(nil, nil, tVchanPub, tVchanPriv)
+	if err != nil {
+		t.Errorf("Can't create a new vchannel manager: %v", err)
+	}
+	defer vch.Close()
+
+	// CreateKey
+
+	csr := []byte("this is csr")
+
+	createKeyRequest := &pbIAM.CreateKeyRequest{Type: "online"}
+
+	go func() {
+		reqData := <-tVchanPriv.send
+		if reqData.MsgSource != vchanmanager.IAM {
+			t.Errorf("Wrong message source: %d", reqData.MsgSource)
+		}
+
+		if reqData.MethodName != "/iamanager.v4.IAMCertificateService/CreateKey" {
+			t.Errorf("Wrong method name: %s", reqData.MethodName)
+		}
+
+		req := &pbIAM.CreateKeyRequest{}
+		if err := proto.Unmarshal(reqData.Data, req); err != nil {
+			t.Errorf("Can't unmarshal data: %v", err)
+		}
+
+		rsp := &pbIAM.CreateKeyResponse{
+			Csr:  string(csr),
+			Type: req.GetType(),
+		}
+
+		data, err := proto.Marshal(rsp)
+		if err != nil {
+			t.Errorf("Can't marshal data: %v", err)
+		}
+
+		tVchanPriv.recv <- vchanmanager.Message{
+			MsgSource: vchanmanager.IAM,
+			Data:      data,
+		}
+	}()
+
+	rsp, err := vch.CreateKey(context.Background(), createKeyRequest)
+	if err != nil {
+		t.Errorf("Can't create key: %v", err)
+	}
+
+	if rsp.GetType() != createKeyRequest.GetType() {
+		t.Errorf("Wrong response type: %s", rsp.GetType())
+	}
+
+	if rsp.GetCsr() != string(csr) {
+		t.Errorf("Wrong response CSR: %s", rsp.GetCsr())
+	}
+
+	// ApplyCertificate
+
+	certificateRequest := &pbIAM.ApplyCertRequest{Type: "online"}
+	certURL := "http://cert.url"
+	serial := "serial"
+
+	go func() {
+		reqData := <-tVchanPriv.send
+		if reqData.MsgSource != vchanmanager.IAM {
+			t.Errorf("Wrong message source: %d", reqData.MsgSource)
+		}
+
+		if reqData.MethodName != "/iamanager.v4.IAMCertificateService/ApplyCert" {
+			t.Errorf("Wrong method name: %s", reqData.MethodName)
+		}
+
+		req := &pbIAM.ApplyCertRequest{}
+		if err := proto.Unmarshal(reqData.Data, req); err != nil {
+			t.Errorf("Can't unmarshal data: %v", err)
+		}
+
+		rsp := &pbIAM.ApplyCertResponse{
+			Type:    req.GetType(),
+			CertUrl: certURL,
+			Serial:  serial,
+		}
+
+		data, err := proto.Marshal(rsp)
+		if err != nil {
+			t.Errorf("Can't marshal data: %v", err)
+		}
+
+		tVchanPriv.recv <- vchanmanager.Message{
+			MsgSource: vchanmanager.IAM,
+			Data:      data,
+		}
+	}()
+
+	rspApplyCert, err := vch.ApplyCert(context.Background(), certificateRequest)
+	if err != nil {
+		t.Errorf("Can't apply certificate: %v", err)
+	}
+
+	if rspApplyCert.GetType() != certificateRequest.GetType() {
+		t.Errorf("Wrong response type: %s", rspApplyCert.GetType())
+	}
+
+	if rspApplyCert.GetCertUrl() != certURL {
+		t.Errorf("Wrong response cert URL: %s", rspApplyCert.GetCertUrl())
+	}
+
+	if rspApplyCert.GetSerial() != serial {
+		t.Errorf("Wrong response serial: %s", rspApplyCert.GetSerial())
+	}
+}
+
 /***********************************************************************************************************************
  * Interfaces
  **********************************************************************************************************************/
@@ -511,12 +866,12 @@ func (v *testVChan) Connect(ctx context.Context) error {
 	return nil
 }
 
-func (v *testVChan) ReadMessage() ([]byte, error) {
+func (v *testVChan) ReadMessage() (vchanmanager.Message, error) {
 	return <-v.recv, nil
 }
 
-func (v *testVChan) WriteMessage(data []byte) error {
-	v.send <- data
+func (v *testVChan) WriteMessage(msg vchanmanager.Message) error {
+	v.send <- msg
 
 	return nil
 }
