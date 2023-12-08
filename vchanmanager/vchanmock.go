@@ -49,11 +49,11 @@ func (v *VChan) Connect(ctx context.Context) error {
 	return nil
 }
 
-func (v *VChan) ReadMessage() ([]byte, error) {
-	return nil, nil
+func (v *VChan) ReadMessage() (Message, error) {
+	return Message{}, nil
 }
 
-func (v *VChan) WriteMessage(data []byte) error {
+func (v *VChan) WriteMessage(msg Message) error {
 	return nil
 }
 
