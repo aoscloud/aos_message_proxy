@@ -35,6 +35,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/aoscloud/aos_messageproxy/config"
+	"github.com/aoscloud/aos_messageproxy/iamclient"
 )
 
 /***********************************************************************************************************************
@@ -50,21 +51,21 @@ const (
  * Types
  **********************************************************************************************************************/
 
+// MessageHandlerItf message handler interface.
+type MessageHandlerItf interface {
+	ReceiveSMMessage() <-chan []byte
+	SendSMMessage(data []byte) error
+}
+
 // CMClient CM client instance.
 type CMClient struct {
 	connection            *grpc.ClientConn
 	stream                pb.SMService_RegisterSMClient
 	cancel                context.CancelFunc
-	sendChan              chan<- []byte
-	recvChan              <-chan []byte
 	waitConnection        sync.WaitGroup
 	savedOutgoingMessages []*pb.SMOutgoingMessages
 	connectionLostNotify  chan struct{}
-}
-
-// CertificateProvider interface to get certificate.
-type CertificateProvider interface {
-	GetCertificate(certType string) (certURL, ketURL string, err error)
+	msgHandler            MessageHandlerItf
 }
 
 /***********************************************************************************************************************
@@ -73,14 +74,13 @@ type CertificateProvider interface {
 
 // New creates new CM client.
 func New(
-	cfg *config.Config, certProvider CertificateProvider, cryptcoxontext *cryptutils.CryptoContext,
-	recvChan <-chan []byte, sendChan chan<- []byte, insecureCon bool,
+	cfg *config.Config, certProvider iamclient.CertificateProvider, cryptcoxontext *cryptutils.CryptoContext,
+	msgHandler MessageHandlerItf, insecureCon bool,
 ) (client *CMClient, err error) {
 	log.Debug("Connecting to CM...")
 
 	client = &CMClient{
-		sendChan:             sendChan,
-		recvChan:             recvChan,
+		msgHandler:           msgHandler,
 		connectionLostNotify: make(chan struct{}, 1),
 	}
 
@@ -89,17 +89,12 @@ func New(
 	if insecureCon {
 		secureOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
 	} else {
-		certURL, keyURL, err := certProvider.GetCertificate(cfg.CertStorage)
+		mTLSConfig, err := certProvider.GetClientMutualTLSConfig(cfg.CertStorage)
 		if err != nil {
 			return nil, aoserrors.Wrap(err)
 		}
 
-		tlsConfig, err := cryptcoxontext.GetClientMutualTLSConfig(certURL, keyURL)
-		if err != nil {
-			return nil, aoserrors.Wrap(err)
-		}
-
-		secureOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
+		secureOpt = grpc.WithTransportCredentials(credentials.NewTLS(mTLSConfig))
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), cmRequestTimeout)
@@ -205,7 +200,11 @@ func (client *CMClient) processMessages() (err error) {
 			continue
 		}
 
-		client.sendChan <- data
+		if err := client.msgHandler.SendSMMessage(data); err != nil {
+			log.Errorf("Failed to send message: %v", aoserrors.Wrap(err))
+
+			continue
+		}
 	}
 }
 
@@ -231,7 +230,7 @@ func (client *CMClient) receiveOutgoingMessages(ctx context.Context) {
 		case <-client.connectionLostNotify:
 			return
 
-		case data, ok := <-client.recvChan:
+		case data, ok := <-client.msgHandler.ReceiveSMMessage():
 			if !ok {
 				return
 			}

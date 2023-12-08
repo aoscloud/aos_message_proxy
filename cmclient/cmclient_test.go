@@ -55,6 +55,11 @@ type testServer struct {
 	outgoingChannel chan *pb.SMOutgoingMessages
 }
 
+type MessageHandlerTest struct {
+	receiver chan []byte
+	sender   chan []byte
+}
+
 /***********************************************************************************************************************
  * Init
  **********************************************************************************************************************/
@@ -88,7 +93,12 @@ func TestOutgoingMessages(t *testing.T) {
 	receiver := make(chan []byte, 1)
 	sender := make(chan []byte, 1)
 
-	client, err := cmclient.New(&config.Config{CMServerURL: serverURL}, nil, nil, receiver, sender, true)
+	msgHandler := &MessageHandlerTest{
+		receiver: receiver,
+		sender:   sender,
+	}
+
+	client, err := cmclient.New(&config.Config{CMServerURL: serverURL}, nil, nil, msgHandler, true)
 	if err != nil {
 		t.Fatalf("Can't create UM client: %v", err)
 	}
@@ -181,7 +191,12 @@ func TestIncomingMessages(t *testing.T) {
 	receiver := make(chan []byte, 1)
 	sender := make(chan []byte, 1)
 
-	client, err := cmclient.New(&config.Config{CMServerURL: serverURL}, nil, nil, receiver, sender, true)
+	msgHandler := &MessageHandlerTest{
+		receiver: receiver,
+		sender:   sender,
+	}
+
+	client, err := cmclient.New(&config.Config{CMServerURL: serverURL}, nil, nil, msgHandler, true)
 	if err != nil {
 		t.Fatalf("Can't create UM client: %v", err)
 	}
@@ -328,4 +343,14 @@ func (server *testServer) close() {
 	if server.grpcServer != nil {
 		server.grpcServer.Stop()
 	}
+}
+
+func (handler *MessageHandlerTest) ReceiveSMMessage() <-chan []byte {
+	return handler.receiver
+}
+
+func (handler *MessageHandlerTest) SendSMMessage(data []byte) error {
+	handler.sender <- data
+
+	return nil
 }
