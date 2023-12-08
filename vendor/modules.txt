@@ -17,6 +17,7 @@ github.com/aoscloud/aos_common/utils/contextreader
 github.com/aoscloud/aos_common/utils/cryptutils
 github.com/aoscloud/aos_common/utils/fs
 github.com/aoscloud/aos_common/utils/retryhelper
+github.com/aoscloud/aos_common/utils/syncstream
 # github.com/cavaliergopher/grab/v3 v3.0.1
 ## explicit; go 1.14
 github.com/cavaliergopher/grab/v3
