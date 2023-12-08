@@ -46,6 +46,13 @@ type VChanConfig struct {
 	XsTxPubPath  string `json:"xsTxPubPath"`
 	XsRxPrivPath string `json:"xsRxPrivPath"`
 	XsTxPrivPath string `json:"xsTxPrivPath"`
+	CertStorage  string `json:"certStorage"`
+}
+
+// IAMConfig IAM configuration.
+type IAMConfig struct {
+	IAMServerURL string `json:"iamServerUrl"`
+	CertStorage  string `json:"certStorage"`
 }
 
 // Config instance.
@@ -58,6 +65,7 @@ type Config struct {
 	CACert             string      `json:"caCert"`
 	ImageStoreDir      string      `json:"imageStoreDir"`
 	Downloader         Downloader  `json:"downloader"`
+	IAMConfig          IAMConfig   `json:"iamConfig"`
 }
 
 /***********************************************************************************************************************

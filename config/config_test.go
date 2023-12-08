@@ -96,7 +96,17 @@ func TestGetWorkingDir(t *testing.T) {
 	}
 }
 
-func TestGetXenConfig(t *testing.T) {
+func TestIAMConfig(t *testing.T) {
+	if testCfg.IAMConfig.IAMServerURL != "localhost:8090" {
+		t.Errorf("Expected IAMServerURL to be localhost:8090, got %s", testCfg.IAMConfig.IAMServerURL)
+	}
+
+	if testCfg.IAMConfig.CertStorage != "certStorage" {
+		t.Errorf("Expected CertStorage to be certStorage, got %s", testCfg.IAMConfig.CertStorage)
+	}
+}
+
+func TestGetVChanConfig(t *testing.T) {
 	if testCfg.VChan.XsRxPubPath != "xsPubPathRead" {
 		t.Errorf("Expected XSPath to be xsPubPathRead, got %s", testCfg.VChan.XsRxPubPath)
 	}
@@ -115,6 +125,10 @@ func TestGetXenConfig(t *testing.T) {
 
 	if testCfg.VChan.Domain != 1 {
 		t.Errorf("Expected Domain to be 1, got %d", testCfg.VChan.Domain)
+	}
+
+	if testCfg.VChan.CertStorage != "certStorage" {
+		t.Errorf("Expected CertStorage to be certStorage, got %s", testCfg.VChan.CertStorage)
 	}
 }
 
@@ -148,7 +162,8 @@ func createConfigFile(fileName string) (err error) {
 		"xsTxPubPath": "xsPubPathWrite",
 		"xsRxPrivPath": "xsPrivPathRead",
 		"xsTxPrivPath": "xsPrivPathWrite",
-		"domain": 1
+		"domain": 1,
+		"certStorage": "certStorage"
 	},
 	"downloader": {
 		"downloadDir": "/path/to/download",
@@ -156,6 +171,10 @@ func createConfigFile(fileName string) (err error) {
 		"retryDelay": "10s",
 		"maxRetryDelay": "30s",
 		"downloadPartLimit": 57
+	},
+	"iamConfig": {
+		"iamServerUrl": "localhost:8090",
+		"certStorage": "certStorage"
 	}
 }`
 
