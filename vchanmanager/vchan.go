@@ -129,35 +129,38 @@ func (v *VChan) Connect(ctx context.Context) (err error) {
 }
 
 // ReadMessage reads data from vchan.
-func (v *VChan) ReadMessage() (data []byte, err error) {
-	buffer, err := v.readVchan(headerSize)
+func (v *VChan) ReadMessage() (msg Message, err error) {
+	buffer, err := v.readVchan(int(headerSize))
 	if err != nil {
-		return nil, err
+		return msg, err
 	}
 
 	header := (*C.struct_VChanMessageHeader)(unsafe.Pointer(&buffer[0]))
 
-	if buffer, err = v.readVchan(header.mDataSize); err != nil {
-		return nil, err
+	if buffer, err = v.readVchan(int(header.mDataSize)); err != nil {
+		return msg, err
 	}
 
 	recievedSha256 := C.GoBytes(unsafe.Pointer(&header.mSha256[0]), C.int(sha256.Size)) //nolint:gocritic
 
 	sha256Payload := sha256.Sum256(buffer)
 	if !bytes.Equal(sha256Payload[:], recievedSha256) {
-		return nil, errChecksumFailed
+		return msg, errChecksumFailed
 	}
 
-	return buffer, nil
+	return Message{
+		MsgSource: MessageSource(header.mSource),
+		Data:      buffer,
+	}, nil
 }
 
 // WriteMessage writes data to vchan.
-func (v *VChan) WriteMessage(data []byte) (err error) {
-	if err = v.writeVchan(prepareHeader(data)); err != nil {
+func (v *VChan) WriteMessage(msg Message) (err error) {
+	if err = v.writeVchan(prepareHeader(msg)); err != nil {
 		return err
 	}
 
-	if err = v.writeVchan(data); err != nil {
+	if err = v.writeVchan(msg.Data); err != nil {
 		return err
 	}
 
@@ -289,16 +292,23 @@ func (v *VChan) writeVchan(buffer []byte) error {
 	return nil
 }
 
-func prepareHeader(data []byte) []byte {
+func prepareHeader(msg Message) []byte {
 	header := C.struct_VChanMessageHeader{
-		mDataSize: C.uint32_t(len(data)),
+		mSource:   C.uint32_t(msg.MsgSource),
+		mDataSize: C.uint32_t(len(msg.Data)),
 	}
 
-	sha256Payload := sha256.Sum256(data)
+	sha256Payload := sha256.Sum256(msg.Data)
 
 	//nolint:gocritic
-	C.memcpy(unsafe.Pointer(
-		&header.mSha256[0]), unsafe.Pointer(&sha256Payload[0]), C.size_t(len(sha256Payload)))
+	C.memcpy(unsafe.Pointer(&header.mSha256[0]), unsafe.Pointer(&sha256Payload[0]), C.size_t(len(sha256Payload)))
+
+	methodName := C.CString(msg.MethodName)
+	defer C.free(unsafe.Pointer(methodName))
+
+	C.strncpy(&header.mMethodName[0], methodName, 255) //nolint: gomnd
+
+	header.mMethodName[255] = 0
 
 	return (*[headerSize]byte)(unsafe.Pointer(&header))[:]
 }
