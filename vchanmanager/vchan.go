@@ -25,6 +25,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"net"
+	"syscall"
 	"time"
 	"unsafe"
 
@@ -59,6 +60,23 @@ import "C"
  **********************************************************************************************************************/
 
 const headerSize = C.size_t(unsafe.Sizeof(C.struct_VChanMessageHeader{}))
+
+type aosError int32
+
+const (
+	eNone aosError = iota
+	eFailed
+	eRuntime
+	eNoMemory
+	eOutOfRange
+	eNotFound
+	eInvalidArgument
+	eTimeout
+	eAlreadyExist
+	eWrongState
+	eInvalidChecksum
+	eNumErrors
+)
 
 /***********************************************************************************************************************
  * Types
@@ -136,6 +154,29 @@ func (v *VChan) ReadMessage() (msg Message, err error) {
 	}
 
 	header := (*C.struct_VChanMessageHeader)(unsafe.Pointer(&buffer[0]))
+
+	// check if there is an aos error
+	if header.mErrno != C.int(eNone) {
+		return Message{
+			MsgSource: MessageSource(header.mSource),
+			Err:       convertAosErrorToError(aosError(header.mAosError)),
+		}, nil
+	}
+
+	// check if there is a system error
+	if header.mErrno != 0 {
+		return Message{
+			MsgSource: MessageSource(header.mSource),
+			Err:       convertErrnoToError(header.mErrno),
+		}, nil
+	}
+
+	// check if empty message response
+	if header.mDataSize == 0 {
+		return Message{
+			MsgSource: MessageSource(header.mSource),
+		}, nil
+	}
 
 	if buffer, err = v.readVchan(int(header.mDataSize)); err != nil {
 		return msg, err
@@ -311,4 +352,35 @@ func prepareHeader(msg Message) []byte {
 	header.mMethodName[255] = 0
 
 	return (*[headerSize]byte)(unsafe.Pointer(&header))[:]
+}
+
+func convertAosErrorToError(err aosError) error {
+	switch err {
+	case eFailed:
+		return aoserrors.Errorf("failed")
+	case eRuntime:
+		return aoserrors.Errorf("runtime")
+	case eNoMemory:
+		return aoserrors.Errorf("no memory")
+	case eOutOfRange:
+		return aoserrors.Errorf("out of range")
+	case eNotFound:
+		return aoserrors.Errorf("not found")
+	case eInvalidArgument:
+		return aoserrors.Errorf("invalid argument")
+	case eTimeout:
+		return aoserrors.Errorf("timeout")
+	case eAlreadyExist:
+		return aoserrors.Errorf("already exist")
+	case eWrongState:
+		return aoserrors.Errorf("wrong state")
+	case eInvalidChecksum:
+		return aoserrors.Errorf("invalid checksum")
+	default:
+		return aoserrors.Errorf("unknown error")
+	}
+}
+
+func convertErrnoToError(errno C.int) error {
+	return aoserrors.Errorf(syscall.Errno(errno).Error())
 }
