@@ -635,22 +635,18 @@ func TestIAMProvisioning(t *testing.T) {
 
 	setOwnerReq := &pbIAM.SetOwnerRequest{Type: "online", Password: password}
 
-	if _, err := vch.SetOwner(context.Background(), setOwnerReq); err != nil {
-		t.Errorf("Can't set owner: %v", err)
-	}
-
-	select {
-	case receivedData := <-tVchanPriv.send:
-		if receivedData.MsgSource != vchanmanager.IAM {
-			t.Errorf("Wrong message source: %d", receivedData.MsgSource)
+	go func() {
+		reqData := <-tVchanPriv.send
+		if reqData.MsgSource != vchanmanager.IAM {
+			t.Errorf("Wrong message source: %d", reqData.MsgSource)
 		}
 
-		if receivedData.MethodName != "/iamanager.v4.IAMProvisioningService/SetOwner" {
-			t.Errorf("Wrong method name: %s", receivedData.MethodName)
+		if reqData.MethodName != "/iamanager.v4.IAMProvisioningService/SetOwner" {
+			t.Errorf("Wrong method name: %s", reqData.MethodName)
 		}
 
 		incomingData := &pbIAM.SetOwnerRequest{}
-		if err := proto.Unmarshal(receivedData.Data, incomingData); err != nil {
+		if err := proto.Unmarshal(reqData.Data, incomingData); err != nil {
 			t.Errorf("Can't unmarshal data: %v", err)
 		}
 
@@ -658,33 +654,31 @@ func TestIAMProvisioning(t *testing.T) {
 			t.Errorf("Expected data: %s, received data: %s", setOwnerReq, incomingData)
 		}
 
-	case <-tVchanPub.send:
-		t.Errorf("Unexpected data")
+		tVchanPriv.recv <- vchanmanager.Message{
+			MsgSource: vchanmanager.IAM,
+		}
+	}()
 
-	case <-time.After(1 * time.Second):
-		t.Errorf("Timeout")
+	if _, err := vch.SetOwner(context.Background(), setOwnerReq); err != nil {
+		t.Errorf("Can't set owner: %v", err)
 	}
 
 	// Clear
 
 	clearReq := &pbIAM.ClearRequest{Type: "online"}
 
-	if _, err := vch.Clear(context.Background(), clearReq); err != nil {
-		t.Errorf("Can't clear: %v", err)
-	}
-
-	select {
-	case receivedData := <-tVchanPriv.send:
-		if receivedData.MsgSource != vchanmanager.IAM {
-			t.Errorf("Wrong message source: %d", receivedData.MsgSource)
+	go func() {
+		reqData := <-tVchanPriv.send
+		if reqData.MsgSource != vchanmanager.IAM {
+			t.Errorf("Wrong message source: %d", reqData.MsgSource)
 		}
 
-		if receivedData.MethodName != "/iamanager.v4.IAMProvisioningService/Clear" {
-			t.Errorf("Wrong method name: %s", receivedData.MethodName)
+		if reqData.MethodName != "/iamanager.v4.IAMProvisioningService/Clear" {
+			t.Errorf("Wrong method name: %s", reqData.MethodName)
 		}
 
 		incomingData := &pbIAM.ClearRequest{}
-		if err := proto.Unmarshal(receivedData.Data, incomingData); err != nil {
+		if err := proto.Unmarshal(reqData.Data, incomingData); err != nil {
 			t.Errorf("Can't unmarshal data: %v", err)
 		}
 
@@ -692,34 +686,31 @@ func TestIAMProvisioning(t *testing.T) {
 			t.Errorf("Expected data: %s, received data: %s", clearReq, incomingData)
 		}
 
-	case <-tVchanPub.send:
-		t.Errorf("Unexpected data")
+		tVchanPriv.recv <- vchanmanager.Message{
+			MsgSource: vchanmanager.IAM,
+		}
+	}()
 
-	case <-time.After(1 * time.Second):
-		t.Errorf("Timeout")
+	if _, err := vch.Clear(context.Background(), clearReq); err != nil {
+		t.Errorf("Can't clear: %v", err)
 	}
 
 	// EncryptDisk
 
 	encryptReq := &pbIAM.EncryptDiskRequest{Password: password}
 
-	if _, err := vch.EncryptDisk(context.Background(), encryptReq); err != nil {
-		t.Errorf("Can't encrypt: %v", err)
-	}
-
-	select {
-	case receivedData := <-tVchanPriv.send:
-		if receivedData.MsgSource != vchanmanager.IAM {
-			t.Errorf("Wrong message source: %d", receivedData.MsgSource)
+	go func() {
+		reqData := <-tVchanPriv.send
+		if reqData.MsgSource != vchanmanager.IAM {
+			t.Errorf("Wrong message source: %d", reqData.MsgSource)
 		}
 
-		if receivedData.MethodName != "/iamanager.v4.IAMProvisioningService/EncryptDisk" {
-			t.Errorf("Wrong method name: %s", receivedData.MethodName)
+		if reqData.MethodName != "/iamanager.v4.IAMProvisioningService/EncryptDisk" {
+			t.Errorf("Wrong method name: %s", reqData.MethodName)
 		}
 
 		incomingData := &pbIAM.EncryptDiskRequest{}
-
-		if err := proto.Unmarshal(receivedData.Data, incomingData); err != nil {
+		if err := proto.Unmarshal(reqData.Data, incomingData); err != nil {
 			t.Errorf("Can't unmarshal data: %v", err)
 		}
 
@@ -727,11 +718,13 @@ func TestIAMProvisioning(t *testing.T) {
 			t.Errorf("Expected data: %s, received data: %s", encryptReq, incomingData)
 		}
 
-	case <-tVchanPub.send:
-		t.Errorf("Unexpected data")
+		tVchanPriv.recv <- vchanmanager.Message{
+			MsgSource: vchanmanager.IAM,
+		}
+	}()
 
-	case <-time.After(1 * time.Second):
-		t.Errorf("Timeout")
+	if _, err := vch.EncryptDisk(context.Background(), encryptReq); err != nil {
+		t.Errorf("Can't encrypt: %v", err)
 	}
 }
 
