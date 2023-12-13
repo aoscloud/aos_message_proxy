@@ -79,6 +79,7 @@ type Message struct {
 	MsgSource  MessageSource
 	MethodName string
 	Data       []byte
+	Err        error
 }
 
 // Vchan vchan instance.
@@ -174,109 +175,71 @@ func (v *VChanManager) Close() {
 
 // CreateKey creates key.
 func (v *VChanManager) CreateKey(ctx context.Context, req *pbIAM.CreateKeyRequest) (*pbIAM.CreateKeyResponse, error) {
-	data, err := v.syncstream.Send(ctx, func() error {
-		return v.sendIAMMessage("/iamanager.v4.IAMCertificateService/CreateKey", req)
-	}, reflect.TypeOf([]byte{}))
-	if err != nil {
-		return nil, aoserrors.Wrap(err)
-	}
-
 	rsp := &pbIAM.CreateKeyResponse{}
 
-	msg, ok := data.([]byte)
-	if !ok {
-		return nil, aoserrors.Errorf("unexpected type of data")
-	}
+	err := v.sendIAMRequest(ctx, "/iamanager.v4.IAMCertificateService/CreateKey", req, rsp)
 
-	if err = proto.Unmarshal(msg, rsp); err != nil {
-		return nil, aoserrors.Wrap(err)
-	}
-
-	return rsp, nil
+	return rsp, err
 }
 
 // ApplyCert applies certificate.
 func (v *VChanManager) ApplyCert(context context.Context, req *pbIAM.ApplyCertRequest) (
 	*pbIAM.ApplyCertResponse, error,
 ) {
-	data, err := v.syncstream.Send(context, func() error {
-		return v.sendIAMMessage("/iamanager.v4.IAMCertificateService/ApplyCert", req)
-	}, reflect.TypeOf([]byte{}))
-	if err != nil {
-		return nil, aoserrors.Wrap(err)
-	}
-
 	rsp := &pbIAM.ApplyCertResponse{}
 
-	msg, ok := data.([]byte)
-	if !ok {
-		return nil, aoserrors.Errorf("unexpected type of data")
-	}
+	err := v.sendIAMRequest(context, "/iamanager.v4.IAMCertificateService/ApplyCert", req, rsp)
 
-	if err = proto.Unmarshal(msg, rsp); err != nil {
-		return nil, aoserrors.Wrap(err)
-	}
-
-	return rsp, nil
+	return rsp, err
 }
 
 // GetCertTypes returns all IAM cert types.
 func (v *VChanManager) GetCertTypes(context context.Context, req *pbIAM.GetCertTypesRequest) (
 	rsp *pbIAM.CertTypes, err error,
 ) {
-	data, err := v.syncstream.Send(context, func() error {
-		return v.sendIAMMessage("/iamanager.v4.IAMProvisioningService/GetCertTypes", req)
-	}, reflect.TypeOf([]byte{}))
-	if err != nil {
-		return nil, aoserrors.Wrap(err)
-	}
-
 	rsp = &pbIAM.CertTypes{}
 
-	msg, ok := data.([]byte)
-	if !ok {
-		return nil, aoserrors.Errorf("unexpected type of data")
-	}
+	err = v.sendIAMRequest(context, "/iamanager.v4.IAMProvisioningService/GetCertTypes", req, rsp)
 
-	if err = proto.Unmarshal(msg, rsp); err != nil {
-		return nil, aoserrors.Wrap(err)
-	}
-
-	return rsp, nil
+	return rsp, err
 }
 
 // SetOwner sets owner.
 func (v *VChanManager) SetOwner(context context.Context, req *pbIAM.SetOwnerRequest) (*empty.Empty, error) {
-	if err := v.sendIAMMessage("/iamanager.v4.IAMProvisioningService/SetOwner", req); err != nil {
-		return nil, err
-	}
-
-	return &empty.Empty{}, nil
+	return &empty.Empty{}, v.sendIAMRequestNoResponse(context, "/iamanager.v4.IAMProvisioningService/SetOwner", req)
 }
 
 // Clear clears.
 func (v *VChanManager) Clear(context context.Context, req *pbIAM.ClearRequest) (*empty.Empty, error) {
-	if err := v.sendIAMMessage("/iamanager.v4.IAMProvisioningService/Clear", req); err != nil {
-		return nil, err
-	}
-
-	return &empty.Empty{}, nil
+	return &empty.Empty{}, v.sendIAMRequestNoResponse(context, "/iamanager.v4.IAMProvisioningService/Clear", req)
 }
 
 // EncryptDisk encrypts disk.
 func (v *VChanManager) EncryptDisk(ctx context.Context, req *pbIAM.EncryptDiskRequest) (*empty.Empty, error) {
-	if err := v.sendIAMMessage("/iamanager.v4.IAMProvisioningService/EncryptDisk", req); err != nil {
-		return nil, err
-	}
-
-	return &empty.Empty{}, nil
+	return &empty.Empty{}, v.sendIAMRequestNoResponse(ctx, "/iamanager.v4.IAMProvisioningService/EncryptDisk", req)
 }
 
 // FinishProvisioning notifies that provisioning is finished.
 func (v *VChanManager) FinishProvisioning(context context.Context, req *empty.Empty) (*empty.Empty, error) {
-	v.sendChan <- Message{
-		MsgSource:  IAM,
-		MethodName: "/iamanager.v4.IAMProvisioningService/FinishProvisioning",
+	data, err := v.syncstream.Send(context, func() error {
+		v.sendChan <- Message{
+			MsgSource:  IAM,
+			MethodName: "/iamanager.v4.IAMProvisioningService/FinishProvisioning",
+		}
+
+		return nil
+	}, reflect.TypeOf(Message{}))
+	if err != nil {
+		return nil, aoserrors.Wrap(err)
+	}
+
+	msg, ok := data.(Message)
+	if !ok {
+		return nil, aoserrors.Errorf("unexpected type of data")
+	}
+
+	if msg.Err != nil {
+		return nil, msg.Err
 	}
 
 	return &empty.Empty{}, nil
@@ -293,19 +256,23 @@ func (v *VChanManager) GetAllNodeIDs(context context.Context,
 		}
 
 		return nil
-	}, reflect.TypeOf([]byte{}))
+	}, reflect.TypeOf(Message{}))
 	if err != nil {
 		return nil, aoserrors.Wrap(err)
 	}
 
-	rsp = &pbIAM.NodesID{}
-
-	msg, ok := data.([]byte)
+	msg, ok := data.(Message)
 	if !ok {
 		return nil, aoserrors.Errorf("unexpected type of data")
 	}
 
-	if err = proto.Unmarshal(msg, rsp); err != nil {
+	if msg.Err != nil {
+		return nil, msg.Err
+	}
+
+	rsp = &pbIAM.NodesID{}
+
+	if err = proto.Unmarshal(msg.Data, rsp); err != nil {
 		return nil, aoserrors.Wrap(err)
 	}
 
@@ -448,7 +415,7 @@ func (v *VChanManager) handleImageContentRequest(
 func (v *VChanManager) processMessage(msg Message) {
 	switch msg.MsgSource {
 	case IAM:
-		if !v.syncstream.ProcessMessages(msg.Data) {
+		if !v.syncstream.ProcessMessages(msg) {
 			log.Errorf("Failed to process IAM message")
 		}
 
@@ -609,6 +576,52 @@ func (v *VChanManager) isImageContentRequest(data []byte) (*pbSM.SMOutgoingMessa
 	imageRequest, ok := outgoingMessage.GetSMOutgoingMessage().(*pbSM.SMOutgoingMessages_ImageContentRequest)
 
 	return imageRequest, ok
+}
+
+func (v *VChanManager) sendIAMRequest(
+	ctx context.Context, methodName string, req proto.Message, rsp proto.Message,
+) error {
+	data, err := v.syncstream.Send(ctx, func() error {
+		return v.sendIAMMessage(methodName, req)
+	}, reflect.TypeOf(Message{}))
+	if err != nil {
+		return aoserrors.Wrap(err)
+	}
+
+	msg, ok := data.(Message)
+	if !ok {
+		return aoserrors.Errorf("unexpected type of data")
+	}
+
+	if msg.Err != nil {
+		return msg.Err
+	}
+
+	if err = proto.Unmarshal(msg.Data, rsp); err != nil {
+		return aoserrors.Wrap(err)
+	}
+
+	return nil
+}
+
+func (v *VChanManager) sendIAMRequestNoResponse(ctx context.Context, methodName string, req proto.Message) error {
+	data, err := v.syncstream.Send(ctx, func() error {
+		return v.sendIAMMessage(methodName, req)
+	}, reflect.TypeOf(Message{}))
+	if err != nil {
+		return aoserrors.Wrap(err)
+	}
+
+	msg, ok := data.(Message)
+	if !ok {
+		return aoserrors.Errorf("unexpected type of data")
+	}
+
+	if msg.Err != nil {
+		return msg.Err
+	}
+
+	return nil
 }
 
 func isPublicMessage(data []byte) bool {
