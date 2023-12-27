@@ -21,7 +21,6 @@ package iamclient_test
 
 import (
 	"context"
-	"io/ioutil"
 	"net"
 	"os"
 	"testing"
@@ -82,7 +81,7 @@ func init() {
 func TestMain(m *testing.M) {
 	var err error
 
-	tmpDir, err = ioutil.TempDir("", "iam_")
+	tmpDir, err = os.MkdirTemp("", "iam_")
 	if err != nil {
 		log.Fatalf("Error create temporary dir: %v", err)
 	}
@@ -144,14 +143,14 @@ func TestGetCertificate(t *testing.T) {
 func (server *testServer) GetCert(
 	context context.Context, req *pb.GetCertRequest,
 ) (rsp *pb.GetCertResponse, err error) {
-	rsp = &pb.GetCertResponse{Type: req.Type}
+	rsp = &pb.GetCertResponse{Type: req.GetType()}
 
-	certURL, ok := server.certURL[req.Type]
+	certURL, ok := server.certURL[req.GetType()]
 	if !ok {
 		return rsp, aoserrors.New("not found")
 	}
 
-	keyURL, ok := server.keyURL[req.Type]
+	keyURL, ok := server.keyURL[req.GetType()]
 	if !ok {
 		return rsp, aoserrors.New("not found")
 	}

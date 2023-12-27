@@ -22,7 +22,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
@@ -86,6 +85,7 @@ func TestReadWriteData(t *testing.T) {
 		send: make(chan []byte, 1),
 		recv: make(chan []byte, 1),
 	}
+
 	vch, err := vchanmanager.New(&config.Config{
 		VChan: config.VChanConfig{
 			XsRxPath: "/tmp/xs_rx",
@@ -117,9 +117,9 @@ func TestReadWriteData(t *testing.T) {
 			vch.GetSendingChannel() <- tCase.data
 
 			select {
-			case recievedData := <-tVchan.send:
-				if string(recievedData) != string(tCase.data) {
-					t.Errorf("Expected data: %s, recieved data: %s", tCase.data, recievedData)
+			case receivedData := <-tVchan.send:
+				if string(receivedData) != string(tCase.data) {
+					t.Errorf("Expected data: %s, received data: %s", tCase.data, receivedData)
 				}
 
 			case <-time.After(1 * time.Second):
@@ -133,9 +133,9 @@ func TestReadWriteData(t *testing.T) {
 			tVchan.recv <- tCase.data
 
 			select {
-			case recievedData := <-vch.GetReceivingChannel():
-				if string(recievedData) != string(tCase.data) {
-					t.Errorf("Expected data: %s, recieved data: %s", tCase.data, recievedData)
+			case receivedData := <-vch.GetReceivingChannel():
+				if string(receivedData) != string(tCase.data) {
+					t.Errorf("Expected data: %s, received data: %s", tCase.data, receivedData)
 				}
 
 			case <-time.After(1 * time.Second):
@@ -151,10 +151,11 @@ func TestDownload(t *testing.T) {
 		recv: make(chan []byte, 1),
 	}
 
-	tmpDir, err := ioutil.TempDir("", "vchan_")
+	tmpDir, err := os.MkdirTemp("", "vchan_")
 	if err != nil {
 		t.Fatalf("Can't create a temp dir: %v", err)
 	}
+
 	defer os.RemoveAll(tmpDir)
 
 	fileName := path.Join(tmpDir, "package.txt")
@@ -194,9 +195,8 @@ func TestDownload(t *testing.T) {
 		t.Fatalf("Can't seek file: %v", err)
 	}
 
-	data := make([]byte, 1*Kilobyte)
-
-	if data, err = ioutil.ReadAll(file); err != nil {
+	data, err := io.ReadAll(file)
+	if err != nil {
 		t.Fatalf("Can't read file: %v", err)
 	}
 
@@ -256,7 +256,7 @@ func TestDownload(t *testing.T) {
 						PartsCount:   1,
 						RelativePath: relPath,
 						Part:         1,
-						Data:         data[:],
+						Data:         data,
 					},
 				},
 			},
@@ -312,8 +312,8 @@ func TestNodeMonitoring(t *testing.T) {
 		},
 	}
 
-	nodeData := nodeMonitoringRequest.SMOutgoingMessage.(*pb.SMOutgoingMessages_NodeMonitoring)
-	if err := nodeData.NodeMonitoring.Timestamp.CheckValid(); err == nil {
+	nodeData, _ := nodeMonitoringRequest.GetSMOutgoingMessage().(*pb.SMOutgoingMessages_NodeMonitoring)
+	if err := nodeData.NodeMonitoring.GetTimestamp().CheckValid(); err == nil {
 		t.Errorf("Unexpected timestamp: %v", err)
 	}
 
@@ -336,15 +336,15 @@ func TestNodeMonitoring(t *testing.T) {
 			t.Fatalf("Unexpected message type: %T", outgoingMessage.GetSMOutgoingMessage())
 		}
 
-		if nodeMonitoring.NodeMonitoring.MonitoringData.Ram != 1000 {
-			t.Errorf("Unexpected RAM value: %d", nodeMonitoring.NodeMonitoring.MonitoringData.Ram)
+		if nodeMonitoring.NodeMonitoring.GetMonitoringData().GetRam() != 1000 {
+			t.Errorf("Unexpected RAM value: %d", nodeMonitoring.NodeMonitoring.GetMonitoringData().GetRam())
 		}
 
-		if nodeMonitoring.NodeMonitoring.MonitoringData.Cpu != 100 {
-			t.Errorf("Unexpected CPU value: %d", nodeMonitoring.NodeMonitoring.MonitoringData.Cpu)
+		if nodeMonitoring.NodeMonitoring.GetMonitoringData().GetCpu() != 100 {
+			t.Errorf("Unexpected CPU value: %d", nodeMonitoring.NodeMonitoring.GetMonitoringData().GetCpu())
 		}
 
-		if err := nodeMonitoring.NodeMonitoring.Timestamp.CheckValid(); err != nil {
+		if err := nodeMonitoring.NodeMonitoring.GetTimestamp().CheckValid(); err != nil {
 			t.Errorf("Unexpected timestamp: %v", err)
 		}
 

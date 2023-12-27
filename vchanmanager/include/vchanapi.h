@@ -11,14 +11,24 @@
 #include <stddef.h>
 #include <stdint.h>
 
+enum AosVChanSource {
+    AOS_VCHAN_SM,
+    AOS_VCHAN_IAM,
+};
+
 /**
- * Header for the aos core messages  over vchan.
+ * Aos core vchan message header.
  */
 
 #pragma pack(push, 1)
 struct VChanMessageHeader {
-  uint32_t dataSize;
-  uint8_t sha256[32];
+    uint32_t mSource;
+    uint32_t mDataSize;
+    uint64_t mRequestID;
+    int32_t  mErrno;
+    int32_t  mAosError;
+    char     mMethodName[256];
+    uint8_t  mSha256[32];
 };
 #pragma pack(pop)
 

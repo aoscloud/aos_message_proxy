@@ -20,7 +20,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -52,7 +52,7 @@ type journalHook struct {
  **********************************************************************************************************************/
 
 // GitSummary provided by govvv at compile-time.
-var GitSummary = "Unknown" // nolint:gochecknoglobals
+var GitSummary = "Unknown" //nolint:gochecknoglobals
 
 /***********************************************************************************************************************
  * Init
@@ -71,6 +71,7 @@ func init() {
  * Main
  **********************************************************************************************************************/
 
+//nolint:funlen
 func main() {
 	configFile := flag.String("c", "aos_messageproxy.cfg", "Path to config file")
 	strLogLevel := flag.String("v", "info", `log level: "debug", "info", "warn", "error", "fatal", "panic"`)
@@ -80,14 +81,14 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("Version: %s\n", GitSummary) // logs aren't initialized
+		fmt.Printf("Version: %s\n", GitSummary) //nolint:forbidigo // logs aren't initialized
 
 		return
 	}
 
 	if *useJournal {
 		log.AddHook(newJournalHook())
-		log.SetOutput(ioutil.Discard)
+		log.SetOutput(io.Discard)
 	} else {
 		log.SetOutput(os.Stdout)
 	}
@@ -135,7 +136,7 @@ func main() {
 
 	cryptoContext, err := cryptutils.NewCryptoContext(config.CACert)
 	if err != nil {
-		log.Fatalf("Can't create crypto context: %s", err)
+		log.Fatalf("Can't create crypto context: %s", err) //nolint:gocritic
 
 		return
 	}

@@ -119,7 +119,9 @@ func (client *Client) GetCertificate(certType string) (certURL, keyURL string, e
 		return "", "", aoserrors.Wrap(err)
 	}
 
-	log.WithFields(log.Fields{"certURL": response.CertUrl, "keyURL": response.KeyUrl}).Debug("Certificate info")
+	log.WithFields(log.Fields{
+		"certURL": response.GetCertUrl(), "keyURL": response.GetKeyUrl(),
+	}).Debug("Certificate info")
 
-	return response.CertUrl, response.KeyUrl, nil
+	return response.GetCertUrl(), response.GetKeyUrl(), nil
 }
