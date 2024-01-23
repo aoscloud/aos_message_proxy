@@ -330,13 +330,11 @@ func (v *VChanManager) filterWriter(ctx context.Context, sendChanOpen, sendChanS
 				return
 			}
 
-			if isPublicMessage(msg.Data) {
+			if isPublicMessage(msg.MsgSource, msg.Data) {
 				sendChanOpen <- msg
-
-				continue
+			} else {
+				sendChanSecure <- msg
 			}
-
-			sendChanSecure <- msg
 
 		case <-ctx.Done():
 			return
@@ -390,6 +388,10 @@ func (v *VChanManager) reader(ctx context.Context, vchan VChanItf, errCh chan<- 
 func (v *VChanManager) handleImageContentRequest(
 	msg Message, vchan VChanItf, ctx context.Context, errCh chan<- error,
 ) bool {
+	if msg.MsgSource != SM {
+		return false
+	}
+
 	request, ok := v.isImageContentRequest(msg.Data)
 	if !ok {
 		return false
@@ -624,7 +626,11 @@ func (v *VChanManager) sendIAMRequestNoResponse(ctx context.Context, methodName 
 	return nil
 }
 
-func isPublicMessage(data []byte) bool {
+func isPublicMessage(source MessageSource, data []byte) bool {
+	if source != SM {
+		return false
+	}
+
 	incomingMessage := &pbSM.SMIncomingMessages{}
 
 	err := proto.Unmarshal(data, incomingMessage)
