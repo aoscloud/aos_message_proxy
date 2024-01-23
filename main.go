@@ -144,8 +144,8 @@ func main() {
 	}
 	defer iam.Close()
 
-	vchanPub := vchanmanager.NewVChan(config.VChan.XsRxPubPath, config.VChan.XsTxPubPath, config.VChan.Domain, nil)
-	defer vchanPub.Close()
+	vchanOpen := vchanmanager.NewVChan(config.VChan.XSOpenRXPath, config.VChan.XSOpenTXPath, config.VChan.Domain, nil)
+	defer vchanOpen.Close()
 
 	var mTLSConfig *tls.Config
 	if !*provisioningMode {
@@ -157,11 +157,11 @@ func main() {
 		}
 	}
 
-	vchanPriv := vchanmanager.NewVChan(
-		config.VChan.XsRxPrivPath, config.VChan.XsTxPrivPath, config.VChan.Domain, mTLSConfig)
-	defer vchanPriv.Close()
+	vchanSecure := vchanmanager.NewVChan(
+		config.VChan.XSSecureRXPath, config.VChan.XSSecureTXPath, config.VChan.Domain, mTLSConfig)
+	defer vchanSecure.Close()
 
-	vch, err := vchanmanager.New(downloadmanager, unpackmanager, vchanPub, vchanPriv)
+	vch, err := vchanmanager.New(downloadmanager, unpackmanager, vchanOpen, vchanSecure)
 	if err != nil {
 		log.Errorf("Can't create vchanmanager: %v", err)
 
