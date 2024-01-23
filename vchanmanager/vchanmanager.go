@@ -84,8 +84,8 @@ type Message struct {
 
 // Vchan vchan instance.
 type VChanManager struct {
-	vchanPub        VChanItf
-	vchanPriv       VChanItf
+	vchanOpen       VChanItf
+	vchanSecure     VChanItf
 	recvSMChan      chan []byte
 	sendChan        chan Message
 	cancel          context.CancelFunc
@@ -109,17 +109,17 @@ var (
 
 // New creates new vchan instance.
 func New(
-	downloadManager DownloaderItf, unpackerManager UnpackerItf, vchanPub VChanItf, vchanPriv VChanItf,
+	downloadManager DownloaderItf, unpackerManager UnpackerItf, vchanOpen VChanItf, vchanSecure VChanItf,
 ) (*VChanManager, error) {
-	if vchanPub == nil || vchanPriv == nil {
+	if vchanOpen == nil || vchanSecure == nil {
 		return nil, aoserrors.Errorf("vchan is nil")
 	}
 
 	v := &VChanManager{
 		recvSMChan:      make(chan []byte, channelSize),
 		sendChan:        make(chan Message, channelSize),
-		vchanPub:        vchanPub,
-		vchanPriv:       vchanPriv,
+		vchanOpen:       vchanOpen,
+		vchanSecure:     vchanSecure,
 		downloadManager: downloadManager,
 		unpackerManager: unpackerManager,
 		syncstream:      syncstream.New(),
@@ -129,13 +129,13 @@ func New(
 
 	ctx, v.cancel = context.WithCancel(context.Background())
 
-	sendChanPub := make(chan Message, channelSize)
-	sendChanPriv := make(chan Message, channelSize)
+	sendChanOpen := make(chan Message, channelSize)
+	sendChanSecure := make(chan Message, channelSize)
 
-	go v.filterWriter(ctx, sendChanPub, sendChanPriv)
+	go v.filterWriter(ctx, sendChanOpen, sendChanSecure)
 
-	go v.run(ctx, vchanPub, sendChanPub)
-	go v.run(ctx, vchanPriv, sendChanPriv)
+	go v.run(ctx, vchanOpen, sendChanOpen)
+	go v.run(ctx, vchanSecure, sendChanSecure)
 
 	return v, nil
 }
@@ -161,11 +161,11 @@ func (v *VChanManager) Close() {
 		v.cancel()
 	}
 
-	if err := v.vchanPub.Disconnect(); err != nil {
+	if err := v.vchanOpen.Disconnect(); err != nil {
 		log.Errorf("Failed to disconnect from vchan: %v", err)
 	}
 
-	if err := v.vchanPriv.Disconnect(); err != nil {
+	if err := v.vchanSecure.Disconnect(); err != nil {
 		log.Errorf("Failed to disconnect from vchan: %v", err)
 	}
 
@@ -322,7 +322,7 @@ func (v *VChanManager) run(ctx context.Context, vchan VChanItf, sendChan chan Me
 	}
 }
 
-func (v *VChanManager) filterWriter(ctx context.Context, sendChanPub, sendChanPriv chan Message) {
+func (v *VChanManager) filterWriter(ctx context.Context, sendChanOpen, sendChanSecure chan Message) {
 	for {
 		select {
 		case msg, ok := <-v.sendChan:
@@ -331,12 +331,12 @@ func (v *VChanManager) filterWriter(ctx context.Context, sendChanPub, sendChanPr
 			}
 
 			if isPublicMessage(msg.Data) {
-				sendChanPub <- msg
+				sendChanOpen <- msg
 
 				continue
 			}
 
-			sendChanPriv <- msg
+			sendChanSecure <- msg
 
 		case <-ctx.Done():
 			return

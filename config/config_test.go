@@ -107,20 +107,20 @@ func TestIAMConfig(t *testing.T) {
 }
 
 func TestGetVChanConfig(t *testing.T) {
-	if testCfg.VChan.XsRxPubPath != "xsPubPathRead" {
-		t.Errorf("Expected XSPath to be xsPubPathRead, got %s", testCfg.VChan.XsRxPubPath)
+	if testCfg.VChan.XSOpenRXPath != "xsOpenReadPath" {
+		t.Errorf("Expected XSPath to be xsOpenReadPath, got %s", testCfg.VChan.XSOpenRXPath)
 	}
 
-	if testCfg.VChan.XsTxPubPath != "xsPubPathWrite" {
-		t.Errorf("Expected XSPath to be xsPubPathWrite, got %s", testCfg.VChan.XsTxPubPath)
+	if testCfg.VChan.XSOpenTXPath != "xsOpenWritePath" {
+		t.Errorf("Expected XSPath to be xsOpenWritePath, got %s", testCfg.VChan.XSOpenTXPath)
 	}
 
-	if testCfg.VChan.XsRxPrivPath != "xsPrivPathRead" {
-		t.Errorf("Expected XSPath to be xsPrivPathRead, got %s", testCfg.VChan.XsRxPrivPath)
+	if testCfg.VChan.XSSecureRXPath != "xsSecureReadPath" {
+		t.Errorf("Expected XSPath to be xsSecureReadPath, got %s", testCfg.VChan.XSSecureRXPath)
 	}
 
-	if testCfg.VChan.XsTxPrivPath != "xsPrivPathWrite" {
-		t.Errorf("Expected XSPath to be xsPrivPathWrite, got %s", testCfg.VChan.XsTxPrivPath)
+	if testCfg.VChan.XSSecureTXPath != "xsSecureWritePath" {
+		t.Errorf("Expected XSPath to be xsSecureWritePath, got %s", testCfg.VChan.XSSecureTXPath)
 	}
 
 	if testCfg.VChan.Domain != 1 {
@@ -158,10 +158,10 @@ func createConfigFile(fileName string) (err error) {
 	"imageStoreDir": "/var/aos/storage",
 	"workingDir" : "workingDir",
 	"vchan": {
-		"xsRxPubPath": "xsPubPathRead",
-		"xsTxPubPath": "xsPubPathWrite",
-		"xsRxPrivPath": "xsPrivPathRead",
-		"xsTxPrivPath": "xsPrivPathWrite",
+		"xsOpenRxPath": "xsOpenReadPath",
+		"xsOpenTxPath": "xsOpenWritePath",
+		"xsSecureRxPath": "xsSecureReadPath",
+		"xsSecureTxPath": "xsSecureWritePath",
 		"domain": 1,
 		"certStorage": "certStorage"
 	},

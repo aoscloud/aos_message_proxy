@@ -41,12 +41,12 @@ type Downloader struct {
 
 // VChanConfig vchan configuration.
 type VChanConfig struct {
-	Domain       int    `json:"domain"`
-	XsRxPubPath  string `json:"xsRxPubPath"`
-	XsTxPubPath  string `json:"xsTxPubPath"`
-	XsRxPrivPath string `json:"xsRxPrivPath"`
-	XsTxPrivPath string `json:"xsTxPrivPath"`
-	CertStorage  string `json:"certStorage"`
+	Domain         int    `json:"domain"`
+	XSOpenRXPath   string `json:"xsOpenRxPath"`
+	XSOpenTXPath   string `json:"xsOpenTxPath"`
+	XSSecureRXPath string `json:"xsSecureRxPath"`
+	XSSecureTXPath string `json:"xsSecureTxPath"`
+	CertStorage    string `json:"certStorage"`
 }
 
 // IAMConfig IAM configuration.
