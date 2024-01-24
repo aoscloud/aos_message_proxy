@@ -177,13 +177,15 @@ func main() {
 	}
 	defer iamServer.Close()
 
-	cm, err := cmclient.New(config, iam, cryptoContext, vch, false)
-	if err != nil {
-		log.Errorf("Can't create cm client: %v", err)
+	if !*provisioningMode {
+		cm, err := cmclient.New(config, iam, cryptoContext, vch, false)
+		if err != nil {
+			log.Errorf("Can't create cm client: %v", err)
 
-		return
+			return
+		}
+		defer cm.Close()
 	}
-	defer cm.Close()
 
 	// Notify systemd
 	if _, err = daemon.SdNotify(false, daemon.SdNotifyReady); err != nil {
