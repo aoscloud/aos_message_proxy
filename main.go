@@ -161,7 +161,7 @@ func main() {
 		config.VChan.XSSecureRXPath, config.VChan.XSSecureTXPath, config.VChan.Domain, mTLSConfig)
 	defer vchanSecure.Close()
 
-	vch, err := vchanmanager.New(downloadmanager, unpackmanager, vchanOpen, vchanSecure)
+	vch, err := vchanmanager.New(downloadmanager, unpackmanager, vchanOpen, vchanSecure, *provisioningMode)
 	if err != nil {
 		log.Errorf("Can't create vchanmanager: %v", err)
 
