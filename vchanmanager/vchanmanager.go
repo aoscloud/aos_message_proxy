@@ -22,6 +22,7 @@ import (
 	"errors"
 	"os"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/aoscloud/aos_common/aoserrors"
@@ -84,6 +85,8 @@ type Message struct {
 
 // Vchan vchan instance.
 type VChanManager struct {
+	sync.Mutex
+
 	vchanOpen       VChanItf
 	vchanSecure     VChanItf
 	recvSMChan      chan []byte
@@ -285,7 +288,11 @@ func (v *VChanManager) GetAllNodeIDs(context context.Context,
 
 func (v *VChanManager) run(ctx context.Context, vchan VChanItf, sendChan chan Message) {
 	for {
-		if err := vchan.Connect(ctx); err == nil {
+		v.Lock()
+		err := vchan.Connect(ctx)
+		v.Unlock()
+
+		if err == nil {
 			errCh := make(chan error, 2) //nolint:gomnd // 2 is enough
 			localCtx, cancel := context.WithCancel(ctx)
 
@@ -301,9 +308,11 @@ func (v *VChanManager) run(ctx context.Context, vchan VChanItf, sendChan chan Me
 			case err := <-errCh:
 				log.Errorf("Failed to read/write from/to vchan: %v", err)
 
+				v.Lock()
 				if err = vchan.Disconnect(); err != nil {
 					log.Errorf("Failed to disconnect from vchan: %v", err)
 				}
+				v.Unlock()
 
 				cancel()
 			}
