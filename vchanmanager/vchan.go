@@ -29,6 +29,8 @@ import (
 	"time"
 	"unsafe"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/aoscloud/aos_common/aoserrors"
 )
 
@@ -272,24 +274,25 @@ func (vc *connection) SetWriteDeadline(t time.Time) error {
 func (v *VChan) newConnection() (conn *connection, err error) {
 	defer func() {
 		if err != nil {
-			v.Close()
+			conn.Close()
 		}
 	}()
 
-	vchanReader, err := v.initVchan(v.domain, v.xsRxPath)
+	log.WithFields(log.Fields{"rxPath": v.xsRxPath, "txPath": v.xsTxPath}).Debug("New connection")
+
+	conn = &connection{}
+
+	conn.vchanReader, err = v.initVchan(v.domain, v.xsRxPath)
 	if err != nil {
-		return nil, err
+		return conn, err
 	}
 
-	vchanWriter, err := v.initVchan(v.domain, v.xsTxPath)
+	conn.vchanWriter, err = v.initVchan(v.domain, v.xsTxPath)
 	if err != nil {
-		return nil, err
+		return conn, err
 	}
 
-	return &connection{
-		vchanReader: vchanReader,
-		vchanWriter: vchanWriter,
-	}, nil
+	return conn, nil
 }
 
 func (v *VChan) initVchan(domain int, xsPath string) (*C.struct_libxenvchan, error) {
