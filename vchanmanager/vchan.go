@@ -302,7 +302,7 @@ func (v *VChan) initVchan(domain int, xsPath string) (*C.struct_libxenvchan, err
 	// To address Golang's inability to access bitfields in C structures,
 	// it is necessary to use server_init() instead of libxenvchan_server_init().
 
-	vchan, err := C.libxenvchan_server_init(nil, C.int(domain), cstr, 0, 0)
+	vchan, err := C.server_init(C.int(domain), cstr)
 	if vchan == nil {
 		return nil, aoserrors.Errorf("libxenvchan_server_init failed: %v", err)
 	}
