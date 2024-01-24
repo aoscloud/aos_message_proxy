@@ -201,8 +201,10 @@ func (v *VChan) WriteMessage(msg Message) (err error) {
 		return err
 	}
 
-	if err = v.writeVchan(msg.Data); err != nil {
-		return err
+	if len(msg.Data) > 0 {
+		if err = v.writeVchan(msg.Data); err != nil {
+			return err
+		}
 	}
 
 	return nil
