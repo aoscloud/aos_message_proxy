@@ -93,7 +93,7 @@ func TestPrivateReadWriteVchan(t *testing.T) {
 		recv: make(chan vchanmanager.Message, 1),
 	}
 
-	vch, err := vchanmanager.New(nil, nil, tVchanPub, tVchanPriv)
+	vch, err := vchanmanager.New(nil, nil, tVchanPub, tVchanPriv, false)
 	if err != nil {
 		t.Errorf("Can't create a new vchannel manager: %v", err)
 	}
@@ -238,7 +238,7 @@ func TestPublicReadWriteVchan(t *testing.T) {
 		recv: make(chan vchanmanager.Message, 1),
 	}
 
-	vch, err := vchanmanager.New(nil, nil, tVchanPub, tVchanPriv)
+	vch, err := vchanmanager.New(nil, nil, tVchanPub, tVchanPriv, false)
 	if err != nil {
 		t.Errorf("Can't create a new vchannel manager: %v", err)
 	}
@@ -412,7 +412,7 @@ func TestDownload(t *testing.T) {
 		downloadedFile: fileName,
 	}, &testUnpacker{
 		filePath: tmpDir,
-	}, tVchanPub, tVchanPriv)
+	}, tVchanPub, tVchanPriv, false)
 	if err != nil {
 		t.Errorf("Can't create a new communication manager: %v", err)
 	}
@@ -542,7 +542,7 @@ func TestIAMProvisioning(t *testing.T) {
 		recv: make(chan vchanmanager.Message, 1),
 	}
 
-	vch, err := vchanmanager.New(nil, nil, tVchanPub, tVchanPriv)
+	vch, err := vchanmanager.New(nil, nil, tVchanPub, tVchanPriv, false)
 	if err != nil {
 		t.Errorf("Can't create a new vchannel manager: %v", err)
 	}
@@ -739,7 +739,7 @@ func TestCertificateService(t *testing.T) {
 		recv: make(chan vchanmanager.Message, 1),
 	}
 
-	vch, err := vchanmanager.New(nil, nil, tVchanPub, tVchanPriv)
+	vch, err := vchanmanager.New(nil, nil, tVchanPub, tVchanPriv, false)
 	if err != nil {
 		t.Errorf("Can't create a new vchannel manager: %v", err)
 	}
