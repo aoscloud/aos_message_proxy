@@ -136,7 +136,7 @@ func main() {
 	}
 	defer cryptoContext.Close()
 
-	iam, err := iamclient.New(config, cryptoContext, false)
+	iam, err := iamclient.New(config, cryptoContext, *provisioningMode)
 	if err != nil {
 		log.Errorf("Can't create iam client: %v", err)
 
