@@ -209,17 +209,17 @@ func (v *VChanManager) GetCertTypes(context context.Context, req *pbIAM.GetCertT
 
 // SetOwner sets owner.
 func (v *VChanManager) SetOwner(context context.Context, req *pbIAM.SetOwnerRequest) (*empty.Empty, error) {
-	return &empty.Empty{}, v.sendIAMRequestNoResponse(context, "/iamanager.v4.IAMProvisioningService/SetOwner", req)
+	return &empty.Empty{}, v.sendIAMRequest(context, "/iamanager.v4.IAMProvisioningService/SetOwner", req, nil)
 }
 
 // Clear clears.
 func (v *VChanManager) Clear(context context.Context, req *pbIAM.ClearRequest) (*empty.Empty, error) {
-	return &empty.Empty{}, v.sendIAMRequestNoResponse(context, "/iamanager.v4.IAMProvisioningService/Clear", req)
+	return &empty.Empty{}, v.sendIAMRequest(context, "/iamanager.v4.IAMProvisioningService/Clear", req, nil)
 }
 
 // EncryptDisk encrypts disk.
 func (v *VChanManager) EncryptDisk(ctx context.Context, req *pbIAM.EncryptDiskRequest) (*empty.Empty, error) {
-	return &empty.Empty{}, v.sendIAMRequestNoResponse(ctx, "/iamanager.v4.IAMProvisioningService/EncryptDisk", req)
+	return &empty.Empty{}, v.sendIAMRequest(ctx, "/iamanager.v4.IAMProvisioningService/EncryptDisk", req, nil)
 }
 
 // FinishProvisioning notifies that provisioning is finished.
@@ -608,28 +608,12 @@ func (v *VChanManager) sendIAMRequest(
 		return msg.Err
 	}
 
+	if len(msg.Data) == 0 || rsp == nil {
+		return nil
+	}
+
 	if err = proto.Unmarshal(msg.Data, rsp); err != nil {
 		return aoserrors.Wrap(err)
-	}
-
-	return nil
-}
-
-func (v *VChanManager) sendIAMRequestNoResponse(ctx context.Context, methodName string, req proto.Message) error {
-	data, err := v.syncstream.Send(ctx, func() error {
-		return v.sendIAMMessage(methodName, req)
-	}, reflect.TypeOf(Message{}))
-	if err != nil {
-		return aoserrors.Wrap(err)
-	}
-
-	msg, ok := data.(Message)
-	if !ok {
-		return aoserrors.Errorf("unexpected type of data")
-	}
-
-	if msg.Err != nil {
-		return msg.Err
 	}
 
 	return nil
