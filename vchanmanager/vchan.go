@@ -164,19 +164,19 @@ func (v *VChan) ReadMessage() (msg Message, err error) {
 
 	header := (*C.struct_VChanMessageHeader)(unsafe.Pointer(&buffer[0]))
 
-	// check if there is an aos error
-	if header.mErrno != C.int(eNone) {
-		return Message{
-			MsgSource: MessageSource(header.mSource),
-			Err:       convertAosErrorToError(aosError(header.mAosError)),
-		}, nil
-	}
-
 	// check if there is a system error
 	if header.mErrno != 0 {
 		return Message{
 			MsgSource: MessageSource(header.mSource),
 			Err:       convertErrnoToError(header.mErrno),
+		}, nil
+	}
+
+	// check if there is an aos error
+	if header.mAosError != C.int(eNone) {
+		return Message{
+			MsgSource: MessageSource(header.mSource),
+			Err:       convertAosErrorToError(aosError(header.mAosError)),
 		}, nil
 	}
 
@@ -191,10 +191,10 @@ func (v *VChan) ReadMessage() (msg Message, err error) {
 		return msg, err
 	}
 
-	recievedSha256 := C.GoBytes(unsafe.Pointer(&header.mSha256[0]), C.int(sha256.Size)) //nolint:gocritic
+	receivedSha256 := C.GoBytes(unsafe.Pointer(&header.mSha256[0]), C.int(sha256.Size)) //nolint:gocritic
 
 	sha256Payload := sha256.Sum256(buffer)
-	if !bytes.Equal(sha256Payload[:], recievedSha256) {
+	if !bytes.Equal(sha256Payload[:], receivedSha256) {
 		return msg, errChecksumFailed
 	}
 
