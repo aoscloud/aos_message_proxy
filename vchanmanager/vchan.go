@@ -24,6 +24,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
+	"errors"
 	"net"
 	"syscall"
 	"time"
@@ -103,7 +104,11 @@ type VChan struct {
  * Vars
  **********************************************************************************************************************/
 
-var errUnexpectedNumberBytes = aoserrors.Errorf("unexpected number of bytes")
+var (
+	errUnexpectedNumberBytes = errors.New("unexpected number of bytes")
+	errReadVChan             = errors.New("read failed")
+	errWriteVChan            = errors.New("write failed")
+)
 
 /***********************************************************************************************************************
  * Public
@@ -231,15 +236,31 @@ func (v *VChan) Disconnect() error {
 func (vc *connection) Read(buffer []byte) (int, error) {
 	bufferSize := C.size_t(len(buffer))
 
-	n, errno := C.libxenvchan_recv(vc.vchanReader, unsafe.Pointer(&buffer[0]), bufferSize)
+	ret, err := C.libxenvchan_read(vc.vchanReader, unsafe.Pointer(&buffer[0]), bufferSize)
+	if err != nil {
+		return int(ret), err
+	}
 
-	return int(n), errno
+	if ret < 0 {
+		return int(ret), errReadVChan
+	}
+
+	return int(ret), nil
 }
 
 func (vc *connection) Write(buffer []byte) (int, error) {
-	n, errno := C.libxenvchan_send(vc.vchanWriter, unsafe.Pointer(&buffer[0]), C.size_t(len(buffer)))
+	bufferSize := C.size_t(len(buffer))
 
-	return int(n), errno
+	ret, err := C.libxenvchan_write(vc.vchanWriter, unsafe.Pointer(&buffer[0]), bufferSize)
+	if err != nil {
+		return int(ret), err
+	}
+
+	if ret < 0 {
+		return int(ret), errWriteVChan
+	}
+
+	return int(ret), nil
 }
 
 func (vc *connection) Close() error {
