@@ -26,6 +26,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -110,6 +111,8 @@ var (
 	errReadVChan             = errors.New("read failed")
 	errWriteVChan            = errors.New("write failed")
 )
+
+var lock sync.Mutex //nolint: gochecknoglobals
 
 /***********************************************************************************************************************
  * Public
@@ -265,6 +268,9 @@ func (vc *connection) Write(buffer []byte) (int, error) {
 }
 
 func (vc *connection) Close() error {
+	lock.Lock()
+	defer lock.Unlock()
+
 	if vc.vchanReader != nil {
 		log.WithFields(log.Fields{"name": vc.name}).Debug("Close read vchan")
 
@@ -310,6 +316,9 @@ func (v *VChan) newConnection(name string) (conn *connection, err error) {
 			conn.Close()
 		}
 	}()
+
+	lock.Lock()
+	defer lock.Unlock()
 
 	log.WithFields(log.Fields{"rxPath": v.xsRxPath, "txPath": v.xsTxPath}).Debug("New connection")
 
