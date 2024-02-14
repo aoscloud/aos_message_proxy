@@ -45,7 +45,7 @@ func (v *VChan) Close() error {
 	return nil
 }
 
-func (v *VChan) Connect(ctx context.Context) error {
+func (v *VChan) Connect(ctx context.Context, name string) error {
 	return nil
 }
 

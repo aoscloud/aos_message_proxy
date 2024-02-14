@@ -70,7 +70,7 @@ type UnpackerItf interface {
 
 // VChanItf interface for vchan.
 type VChanItf interface {
-	Connect(ctx context.Context) error
+	Connect(ctx context.Context, name string) error
 	ReadMessage() (Message, error)
 	WriteMessage(msg Message) error
 	Disconnect() error
@@ -141,8 +141,8 @@ func New(
 
 	go v.filterWriter(ctx, sendChanOpen, sendChanSecure)
 
-	go v.run(ctx, vchanOpen, sendChanOpen)
-	go v.run(ctx, vchanSecure, sendChanSecure)
+	go v.run(ctx, "open", vchanOpen, sendChanOpen)
+	go v.run(ctx, "secure", vchanSecure, sendChanSecure)
 
 	return v, nil
 }
@@ -290,10 +290,10 @@ func (v *VChanManager) GetAllNodeIDs(context context.Context,
  * Private
  **********************************************************************************************************************/
 
-func (v *VChanManager) run(ctx context.Context, vchan VChanItf, sendChan chan Message) {
+func (v *VChanManager) run(ctx context.Context, name string, vchan VChanItf, sendChan chan Message) {
 	for {
 		v.Lock()
-		err := vchan.Connect(ctx)
+		err := vchan.Connect(ctx, name)
 		v.Unlock()
 
 		if err == nil {
@@ -413,14 +413,16 @@ func (v *VChanManager) handleSMOutgoingMessages(ctx context.Context, msg Message
 		return false
 	}
 
+	log.WithFields(log.Fields{
+		"type": reflect.TypeOf(outgoingMessage.GetSMOutgoingMessage()),
+	}).Debug("Receive SM outgoing message")
+
 	switch smMessage := outgoingMessage.GetSMOutgoingMessage().(type) {
 	case *pbSM.SMOutgoingMessages_ImageContentRequest:
 		go v.handleImageContentRequest(ctx, *smMessage, vchan, errCh)
 		return true
 
 	case *pbSM.SMOutgoingMessages_ClockSyncRequest:
-		log.Debug("Receive clock sync request")
-
 		clockSync := &pbSM.SMIncomingMessages{
 			SMIncomingMessage: &pbSM.SMIncomingMessages_ClockSync{
 				ClockSync: &pbSM.ClockSync{

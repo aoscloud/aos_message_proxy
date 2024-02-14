@@ -855,7 +855,7 @@ func TestCertificateService(t *testing.T) {
  * Interfaces
  **********************************************************************************************************************/
 
-func (v *testVChan) Connect(ctx context.Context) error {
+func (v *testVChan) Connect(ctx context.Context, name string) error {
 	return nil
 }
 
