@@ -340,27 +340,30 @@ func (v *VChan) initVchan(domain int, xsPath string) (*C.struct_libxenvchan, err
 
 func (v *VChan) readVchan(buffSize int) ([]byte, error) {
 	buffer := make([]byte, buffSize)
+	read := 0
 
-	n, err := v.conn.Read(buffer)
-	if err != nil {
-		return nil, aoserrors.Wrap(err)
-	}
+	for read < len(buffer) {
+		n, err := v.conn.Read(buffer[read:])
+		if err != nil {
+			return nil, aoserrors.Wrap(err)
+		}
 
-	if n != buffSize {
-		return nil, aoserrors.Wrap(errUnexpectedNumberBytes)
+		read += n
 	}
 
 	return buffer, nil
 }
 
 func (v *VChan) writeVchan(buffer []byte) error {
-	n, err := v.conn.Write(buffer)
-	if err != nil {
-		return aoserrors.Wrap(err)
-	}
+	write := 0
 
-	if n != len(buffer) {
-		return aoserrors.Wrap(errUnexpectedNumberBytes)
+	for write < len(buffer) {
+		n, err := v.conn.Write(buffer[write:])
+		if err != nil {
+			return aoserrors.Wrap(err)
+		}
+
+		write += n
 	}
 
 	return nil
