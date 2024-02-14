@@ -419,29 +419,27 @@ func (v *VChanManager) handleSMOutgoingMessages(ctx context.Context, msg Message
 		return true
 
 	case *pbSM.SMOutgoingMessages_ClockSyncRequest:
-		if v.provisioningMode {
-			log.Debug("Receive clock sync request")
+		log.Debug("Receive clock sync request")
 
-			clockSync := &pbSM.SMIncomingMessages{
-				SMIncomingMessage: &pbSM.SMIncomingMessages_ClockSync{
-					ClockSync: &pbSM.ClockSync{
-						CurrentTime: timestamppb.Now(),
-					},
+		clockSync := &pbSM.SMIncomingMessages{
+			SMIncomingMessage: &pbSM.SMIncomingMessages_ClockSync{
+				ClockSync: &pbSM.ClockSync{
+					CurrentTime: timestamppb.Now(),
 				},
-			}
+			},
+		}
 
-			data, err := proto.Marshal(clockSync)
-			if err != nil {
-				log.Errorf("Can't marshal clock sync: %v", aoserrors.Wrap(err))
-				return true
-			}
-
-			if err = v.SendSMMessage(data); err != nil {
-				log.Errorf("Can't send SM message: %v", aoserrors.Wrap(err))
-			}
-
+		data, err := proto.Marshal(clockSync)
+		if err != nil {
+			log.Errorf("Can't marshal clock sync: %v", aoserrors.Wrap(err))
 			return true
 		}
+
+		if err = v.SendSMMessage(data); err != nil {
+			log.Errorf("Can't send SM message: %v", aoserrors.Wrap(err))
+		}
+
+		return true
 	}
 
 	return false
