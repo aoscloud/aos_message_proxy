@@ -66,11 +66,11 @@ type Client struct {
 
 // New creates new IAM client.
 func New(
-	config *config.Config, cryptcoxontext *cryptutils.CryptoContext, insecureConn bool,
+	config *config.Config, cryptocontext *cryptutils.CryptoContext, insecureConn bool,
 ) (client *Client, err error) {
 	log.Debug("Connecting to IAM...")
 
-	client = &Client{}
+	client = &Client{cryptoContext: cryptocontext}
 
 	defer func() {
 		if err != nil {
@@ -84,7 +84,7 @@ func New(
 	securePublicOpt := grpc.WithTransportCredentials(insecure.NewCredentials())
 
 	if !insecureConn {
-		tlsConfig, err := cryptcoxontext.GetClientTLSConfig()
+		tlsConfig, err := cryptocontext.GetClientTLSConfig()
 		if err != nil {
 			return client, aoserrors.Wrap(err)
 		}
