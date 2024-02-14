@@ -77,7 +77,8 @@ const (
 	eAlreadyExist
 	eWrongState
 	eInvalidChecksum
-	eNumErrors
+	eAlreadyLoggedIn
+	eNotSupported
 )
 
 /***********************************************************************************************************************
@@ -381,6 +382,10 @@ func convertAosErrorToError(err aosError) error {
 		return aoserrors.Errorf("wrong state")
 	case eInvalidChecksum:
 		return aoserrors.Errorf("invalid checksum")
+	case eAlreadyLoggedIn:
+		return aoserrors.Errorf("already logged in")
+	case eNotSupported:
+		return aoserrors.Errorf("not supported")
 	default:
 		return aoserrors.Errorf("unknown error")
 	}
