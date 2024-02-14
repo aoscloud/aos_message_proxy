@@ -87,6 +87,7 @@ const (
  **********************************************************************************************************************/
 
 type connection struct {
+	name        string
 	vchanReader *C.struct_libxenvchan
 	vchanWriter *C.struct_libxenvchan
 }
@@ -134,8 +135,8 @@ func (v *VChan) Close() error {
 }
 
 // Connect connects to vchan.
-func (v *VChan) Connect(ctx context.Context) (err error) {
-	if v.conn, err = v.newConnection(); err != nil {
+func (v *VChan) Connect(ctx context.Context, name string) (err error) {
+	if v.conn, err = v.newConnection(name); err != nil {
 		return err
 	}
 
@@ -265,10 +266,14 @@ func (vc *connection) Write(buffer []byte) (int, error) {
 
 func (vc *connection) Close() error {
 	if vc.vchanReader != nil {
+		log.WithFields(log.Fields{"name": vc.name}).Debug("Close read vchan")
+
 		C.libxenvchan_close(vc.vchanReader)
 	}
 
 	if vc.vchanWriter != nil {
+		log.WithFields(log.Fields{"name": vc.name}).Debug("Close write vchan")
+
 		C.libxenvchan_close(vc.vchanWriter)
 	}
 
@@ -299,7 +304,7 @@ func (vc *connection) SetWriteDeadline(t time.Time) error {
  * Private
  **********************************************************************************************************************/
 
-func (v *VChan) newConnection() (conn *connection, err error) {
+func (v *VChan) newConnection(name string) (conn *connection, err error) {
 	defer func() {
 		if err != nil {
 			conn.Close()
@@ -308,7 +313,7 @@ func (v *VChan) newConnection() (conn *connection, err error) {
 
 	log.WithFields(log.Fields{"rxPath": v.xsRxPath, "txPath": v.xsTxPath}).Debug("New connection")
 
-	conn = &connection{}
+	conn = &connection{name: name}
 
 	conn.vchanReader, err = v.initVchan(v.domain, v.xsRxPath)
 	if err != nil {
@@ -334,6 +339,8 @@ func (v *VChan) initVchan(domain int, xsPath string) (*C.struct_libxenvchan, err
 	if vchan == nil {
 		return nil, aoserrors.Errorf("libxenvchan_server_init failed: %v", err)
 	}
+
+	log.WithFields(log.Fields{"rxPath": xsPath}).Debug("VChan created")
 
 	return vchan, nil
 }
