@@ -138,6 +138,12 @@ func (v *VChan) Connect(ctx context.Context) (err error) {
 		return nil
 	}
 
+	defer func() {
+		if err != nil {
+			v.conn.Close()
+		}
+	}()
+
 	tlsConn := tls.Server(v.conn, v.mTLSConfig)
 
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
