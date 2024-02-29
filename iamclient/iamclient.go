@@ -19,6 +19,7 @@ package iamclient
 
 import (
 	"context"
+	"crypto/tls"
 	"sync"
 	"time"
 
@@ -43,12 +44,20 @@ const iamRequestTimeout = 30 * time.Second
  * Types
  **********************************************************************************************************************/
 
+// CertificateProvider interface to get certificate.
+type CertificateProvider interface {
+	GetCertificate(certType string) (certURL, ketURL string, err error)
+	GetClientMutualTLSConfig(certStorage string) (*tls.Config, error)
+	GetServerMutualTLSConfig(certStorage string) (*tls.Config, error)
+}
+
 // Client IAM client instance.
 type Client struct {
 	sync.Mutex
 
 	publicService    pb.IAMPublicServiceClient
 	publicConnection *grpc.ClientConn
+	cryptoContext    *cryptutils.CryptoContext
 }
 
 /***********************************************************************************************************************
@@ -57,11 +66,11 @@ type Client struct {
 
 // New creates new IAM client.
 func New(
-	config *config.Config, cryptcoxontext *cryptutils.CryptoContext, insecureConn bool,
+	config *config.Config, cryptocontext *cryptutils.CryptoContext, insecureConn bool,
 ) (client *Client, err error) {
 	log.Debug("Connecting to IAM...")
 
-	client = &Client{}
+	client = &Client{cryptoContext: cryptocontext}
 
 	defer func() {
 		if err != nil {
@@ -75,7 +84,7 @@ func New(
 	securePublicOpt := grpc.WithTransportCredentials(insecure.NewCredentials())
 
 	if !insecureConn {
-		tlsConfig, err := cryptcoxontext.GetClientTLSConfig()
+		tlsConfig, err := cryptocontext.GetClientTLSConfig()
 		if err != nil {
 			return client, aoserrors.Wrap(err)
 		}
@@ -124,4 +133,34 @@ func (client *Client) GetCertificate(certType string) (certURL, keyURL string, e
 	}).Debug("Certificate info")
 
 	return response.GetCertUrl(), response.GetKeyUrl(), nil
+}
+
+// GetClientMutualTLSConfig gets client mutual TLS config.
+func (client *Client) GetClientMutualTLSConfig(certStorage string) (*tls.Config, error) {
+	certURL, keyURL, err := client.GetCertificate(certStorage)
+	if err != nil {
+		return nil, aoserrors.Wrap(err)
+	}
+
+	tlsConfig, err := client.cryptoContext.GetClientMutualTLSConfig(certURL, keyURL)
+	if err != nil {
+		return nil, aoserrors.Wrap(err)
+	}
+
+	return tlsConfig, nil
+}
+
+// GetServerMutualTLSConfig gets server mutual TLS config.
+func (client *Client) GetServerMutualTLSConfig(certStorage string) (*tls.Config, error) {
+	certURL, keyURL, err := client.GetCertificate(certStorage)
+	if err != nil {
+		return nil, aoserrors.Wrap(err)
+	}
+
+	tlsConfig, err := client.cryptoContext.GetServerMutualTLSConfig(certURL, keyURL)
+	if err != nil {
+		return nil, aoserrors.Wrap(err)
+	}
+
+	return tlsConfig, nil
 }

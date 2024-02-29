@@ -41,9 +41,18 @@ type Downloader struct {
 
 // VChanConfig vchan configuration.
 type VChanConfig struct {
-	Domain   int    `json:"domain"`
-	XsRxPath string `json:"xsRxPath"`
-	XsTxPath string `json:"xsTxPath"`
+	Domain         int    `json:"domain"`
+	XSOpenRXPath   string `json:"xsOpenRxPath"`
+	XSOpenTXPath   string `json:"xsOpenTxPath"`
+	XSSecureRXPath string `json:"xsSecureRxPath"`
+	XSSecureTXPath string `json:"xsSecureTxPath"`
+	CertStorage    string `json:"certStorage"`
+}
+
+// IAMConfig IAM configuration.
+type IAMConfig struct {
+	IAMServerURL string `json:"iamServerUrl"`
+	CertStorage  string `json:"certStorage"`
 }
 
 // Config instance.
@@ -56,6 +65,7 @@ type Config struct {
 	CACert             string      `json:"caCert"`
 	ImageStoreDir      string      `json:"imageStoreDir"`
 	Downloader         Downloader  `json:"downloader"`
+	IAMConfig          IAMConfig   `json:"iamConfig"`
 }
 
 /***********************************************************************************************************************

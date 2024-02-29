@@ -22,6 +22,11 @@
 
 package vchanmanager
 
+import (
+	"context"
+	"crypto/tls"
+)
+
 /***********************************************************************************************************************
  * Types
  **********************************************************************************************************************/
@@ -32,20 +37,26 @@ type VChan struct{}
  * Public
  **********************************************************************************************************************/
 
-func NewVChan() *VChan {
+func NewVChan(xsRxPath string, xsTxPath string, domain int, mTlsConfig *tls.Config) *VChan {
 	return &VChan{}
 }
 
-func (v *VChan) Init(domain int, xsPath string) error {
+func (v *VChan) Close() error {
 	return nil
 }
 
-func (v *VChan) Read() ([]byte, error) {
-	return nil, nil
-}
-
-func (v *VChan) Write(data []byte) error {
+func (v *VChan) Connect(ctx context.Context, name string) error {
 	return nil
 }
 
-func (v *VChan) Close() {}
+func (v *VChan) ReadMessage() (Message, error) {
+	return Message{}, nil
+}
+
+func (v *VChan) WriteMessage(msg Message) error {
+	return nil
+}
+
+func (v *VChan) Disconnect() error {
+	return nil
+}

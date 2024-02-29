@@ -18,6 +18,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"io"
@@ -35,6 +36,7 @@ import (
 	"github.com/aoscloud/aos_messageproxy/config"
 	"github.com/aoscloud/aos_messageproxy/downloader"
 	"github.com/aoscloud/aos_messageproxy/iamclient"
+	"github.com/aoscloud/aos_messageproxy/iamserver"
 	"github.com/aoscloud/aos_messageproxy/imageunpacker"
 	"github.com/aoscloud/aos_messageproxy/vchanmanager"
 )
@@ -76,6 +78,7 @@ func main() {
 	configFile := flag.String("c", "aos_messageproxy.cfg", "Path to config file")
 	strLogLevel := flag.String("v", "info", `log level: "debug", "info", "warn", "error", "fatal", "panic"`)
 	showVersion := flag.Bool("version", false, `Show message proxy version`)
+	provisioningMode := flag.Bool("provisioning", false, "enable provisioning mode")
 	useJournal := flag.Bool("j", false, "Output logs to systemd journal")
 
 	flag.Parse()
@@ -125,38 +128,64 @@ func main() {
 		return
 	}
 
-	vch, err := vchanmanager.New(
-		config, downloadmanager, unpackmanager, vchanmanager.NewVChan(), vchanmanager.NewVChan())
-	if err != nil {
-		log.Fatalf("Can't create vchanmanager: %s", err)
-
-		return
-	}
-	defer vch.Close()
-
 	cryptoContext, err := cryptutils.NewCryptoContext(config.CACert)
 	if err != nil {
-		log.Fatalf("Can't create crypto context: %s", err) //nolint:gocritic
+		log.Errorf("Can't create crypto context: %v", err)
 
 		return
 	}
 	defer cryptoContext.Close()
 
-	iam, err := iamclient.New(config, cryptoContext, false)
+	iam, err := iamclient.New(config, cryptoContext, *provisioningMode)
 	if err != nil {
-		log.Fatalf("Can't create iam client: %s", err)
+		log.Errorf("Can't create iam client: %v", err)
 
 		return
 	}
 	defer iam.Close()
 
-	cm, err := cmclient.New(config, iam, cryptoContext, vch.GetReceivingChannel(), vch.GetSendingChannel(), false)
+	vchanOpen := vchanmanager.NewVChan(config.VChan.XSOpenRXPath, config.VChan.XSOpenTXPath, config.VChan.Domain, nil)
+	defer vchanOpen.Close()
+
+	var mTLSConfig *tls.Config
+	if !*provisioningMode {
+		mTLSConfig, err = iam.GetClientMutualTLSConfig(config.VChan.CertStorage)
+		if err != nil {
+			log.Errorf("Can't get client mutual TLS config: %v", err)
+
+			return
+		}
+	}
+
+	vchanSecure := vchanmanager.NewVChan(
+		config.VChan.XSSecureRXPath, config.VChan.XSSecureTXPath, config.VChan.Domain, mTLSConfig)
+	defer vchanSecure.Close()
+
+	vch, err := vchanmanager.New(downloadmanager, unpackmanager, vchanOpen, vchanSecure, *provisioningMode)
 	if err != nil {
-		log.Fatalf("Can't create cm client: %s", err)
+		log.Errorf("Can't create vchanmanager: %v", err)
 
 		return
 	}
-	defer cm.Close()
+	defer vch.Close()
+
+	iamServer, err := iamserver.New(config, cryptoContext, vch, iam, *provisioningMode)
+	if err != nil {
+		log.Errorf("Can't create iam server: %v", err)
+
+		return
+	}
+	defer iamServer.Close()
+
+	if !*provisioningMode {
+		cm, err := cmclient.New(config, iam, cryptoContext, vch, false)
+		if err != nil {
+			log.Errorf("Can't create cm client: %v", err)
+
+			return
+		}
+		defer cm.Close()
+	}
 
 	// Notify systemd
 	if _, err = daemon.SdNotify(false, daemon.SdNotifyReady); err != nil {

@@ -96,17 +96,39 @@ func TestGetWorkingDir(t *testing.T) {
 	}
 }
 
-func TestGetXenConfig(t *testing.T) {
-	if testCfg.VChan.XsRxPath != "xsPathRead" {
-		t.Errorf("Expected XSPath to be xsPathRead, got %s", testCfg.VChan.XsRxPath)
+func TestIAMConfig(t *testing.T) {
+	if testCfg.IAMConfig.IAMServerURL != "localhost:8090" {
+		t.Errorf("Expected IAMServerURL to be localhost:8090, got %s", testCfg.IAMConfig.IAMServerURL)
+	}
+
+	if testCfg.IAMConfig.CertStorage != "certStorage" {
+		t.Errorf("Expected CertStorage to be certStorage, got %s", testCfg.IAMConfig.CertStorage)
+	}
+}
+
+func TestGetVChanConfig(t *testing.T) {
+	if testCfg.VChan.XSOpenRXPath != "xsOpenReadPath" {
+		t.Errorf("Expected XSPath to be xsOpenReadPath, got %s", testCfg.VChan.XSOpenRXPath)
+	}
+
+	if testCfg.VChan.XSOpenTXPath != "xsOpenWritePath" {
+		t.Errorf("Expected XSPath to be xsOpenWritePath, got %s", testCfg.VChan.XSOpenTXPath)
+	}
+
+	if testCfg.VChan.XSSecureRXPath != "xsSecureReadPath" {
+		t.Errorf("Expected XSPath to be xsSecureReadPath, got %s", testCfg.VChan.XSSecureRXPath)
+	}
+
+	if testCfg.VChan.XSSecureTXPath != "xsSecureWritePath" {
+		t.Errorf("Expected XSPath to be xsSecureWritePath, got %s", testCfg.VChan.XSSecureTXPath)
 	}
 
 	if testCfg.VChan.Domain != 1 {
 		t.Errorf("Expected Domain to be 1, got %d", testCfg.VChan.Domain)
 	}
 
-	if testCfg.VChan.XsTxPath != "xsPathWrite" {
-		t.Errorf("Expected XSPath to be xsPathWrite, got %s", testCfg.VChan.XsTxPath)
+	if testCfg.VChan.CertStorage != "certStorage" {
+		t.Errorf("Expected CertStorage to be certStorage, got %s", testCfg.VChan.CertStorage)
 	}
 }
 
@@ -136,9 +158,12 @@ func createConfigFile(fileName string) (err error) {
 	"imageStoreDir": "/var/aos/storage",
 	"workingDir" : "workingDir",
 	"vchan": {
-		"xsRxPath": "xsPathRead",
-		"xsTxPath": "xsPathWrite",
-		"domain": 1
+		"xsOpenRxPath": "xsOpenReadPath",
+		"xsOpenTxPath": "xsOpenWritePath",
+		"xsSecureRxPath": "xsSecureReadPath",
+		"xsSecureTxPath": "xsSecureWritePath",
+		"domain": 1,
+		"certStorage": "certStorage"
 	},
 	"downloader": {
 		"downloadDir": "/path/to/download",
@@ -146,6 +171,10 @@ func createConfigFile(fileName string) (err error) {
 		"retryDelay": "10s",
 		"maxRetryDelay": "30s",
 		"downloadPartLimit": 57
+	},
+	"iamConfig": {
+		"iamServerUrl": "localhost:8090",
+		"certStorage": "certStorage"
 	}
 }`
 

@@ -7,9 +7,10 @@ replace github.com/ThalesIgnite/crypto11 => github.com/aoscloud/crypto11 v1.0.3-
 replace github.com/anexia-it/fsquota => github.com/aoscloud/fsquota v0.0.0-20231127111317-842d831105a7
 
 require (
-	github.com/aoscloud/aos_common v0.0.0-20231227133432-0c97aef1696d
+	github.com/aoscloud/aos_common v0.0.0-20240229163820-8da83091bc41
 	github.com/cavaliergopher/grab/v3 v3.0.1
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
+	github.com/golang/protobuf v1.5.3
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.0.2
 	github.com/sirupsen/logrus v1.9.3
@@ -21,7 +22,6 @@ require (
 require (
 	github.com/ThalesIgnite/crypto11 v0.0.0-00010101000000-000000000000 // indirect
 	github.com/anexia-it/fsquota v0.0.0-00010101000000-000000000000 // indirect
-	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/go-tpm v0.9.0 // indirect
 	github.com/hashicorp/go-version v1.6.0 // indirect
 	github.com/miekg/pkcs11 v1.0.3-0.20190429190417-a667d056470f // indirect
