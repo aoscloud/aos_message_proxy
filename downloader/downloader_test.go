@@ -32,11 +32,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aoscloud/aos_common/aoserrors"
+	"github.com/aosedge/aos_common/aoserrors"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/aoscloud/aos_messageproxy/config"
-	"github.com/aoscloud/aos_messageproxy/downloader"
+	"github.com/aosedge/aos_messageproxy/config"
+	"github.com/aosedge/aos_messageproxy/downloader"
 )
 
 /***********************************************************************************************************************

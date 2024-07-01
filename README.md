@@ -1,5 +1,5 @@
-[![CI](https://github.com/aoscloud/aos_message_proxy/workflows/CI/badge.svg)](https://github.com/aoscloud/aos_message_proxy/actions?query=workflow%3ACI)
-[![codecov](https://codecov.io/gh/aoscloud/aos_message_proxy/branch/main/graph/badge.svg?token=mZKEdNf2fx)](https://codecov.io/gh/aoscloud/aos_message_proxy)
+[![CI](https://github.com/aosedge/aos_message_proxy/workflows/CI/badge.svg)](https://github.com/aosedge/aos_message_proxy/actions?query=workflow%3ACI)
+[![codecov](https://codecov.io/gh/aosedge/aos_message_proxy/branch/main/graph/badge.svg?token=mZKEdNf2fx)](https://codecov.io/gh/aosedge/aos_message_proxy)
 
 # aos_message_proxy
 

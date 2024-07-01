@@ -24,16 +24,16 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/aoscloud/aos_common/aoserrors"
-	pbIAM "github.com/aoscloud/aos_common/api/iamanager/v4"
-	pbSM "github.com/aoscloud/aos_common/api/servicemanager/v3"
-	"github.com/aoscloud/aos_common/utils/syncstream"
+	"github.com/aosedge/aos_common/aoserrors"
+	pbIAM "github.com/aosedge/aos_common/api/iamanager/v4"
+	pbSM "github.com/aosedge/aos_common/api/servicemanager/v3"
+	"github.com/aosedge/aos_common/utils/syncstream"
 	"github.com/golang/protobuf/ptypes/empty"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/aoscloud/aos_messageproxy/filechunker"
+	"github.com/aosedge/aos_messageproxy/filechunker"
 )
 
 /***********************************************************************************************************************

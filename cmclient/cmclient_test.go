@@ -27,14 +27,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aoscloud/aos_common/aoserrors"
-	pb "github.com/aoscloud/aos_common/api/servicemanager/v3"
+	"github.com/aosedge/aos_common/aoserrors"
+	pb "github.com/aosedge/aos_common/api/servicemanager/v3"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/aoscloud/aos_messageproxy/cmclient"
-	"github.com/aoscloud/aos_messageproxy/config"
+	"github.com/aosedge/aos_messageproxy/cmclient"
+	"github.com/aosedge/aos_messageproxy/config"
 )
 
 /***********************************************************************************************************************

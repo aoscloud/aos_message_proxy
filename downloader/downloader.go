@@ -22,13 +22,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/aoscloud/aos_common/aoserrors"
-	"github.com/aoscloud/aos_common/utils/action"
-	"github.com/aoscloud/aos_common/utils/retryhelper"
+	"github.com/aosedge/aos_common/aoserrors"
+	"github.com/aosedge/aos_common/utils/action"
+	"github.com/aosedge/aos_common/utils/retryhelper"
 	"github.com/cavaliergopher/grab/v3"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/aoscloud/aos_messageproxy/config"
+	"github.com/aosedge/aos_messageproxy/config"
 )
 
 /***********************************************************************************************************************

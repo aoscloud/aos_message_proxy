@@ -33,7 +33,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/aoscloud/aos_common/aoserrors"
+	"github.com/aosedge/aos_common/aoserrors"
 )
 
 /*
