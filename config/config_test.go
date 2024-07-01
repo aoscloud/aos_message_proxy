@@ -27,10 +27,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aoscloud/aos_common/aoserrors"
-	"github.com/aoscloud/aos_common/aostypes"
+	"github.com/aosedge/aos_common/aoserrors"
+	"github.com/aosedge/aos_common/aostypes"
 
-	"github.com/aoscloud/aos_messageproxy/config"
+	"github.com/aosedge/aos_messageproxy/config"
 )
 
 /***********************************************************************************************************************

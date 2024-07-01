@@ -23,9 +23,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aoscloud/aos_common/aoserrors"
-	pb "github.com/aoscloud/aos_common/api/servicemanager/v3"
-	"github.com/aoscloud/aos_common/utils/cryptutils"
+	"github.com/aosedge/aos_common/aoserrors"
+	pb "github.com/aosedge/aos_common/api/servicemanager/v3"
+	"github.com/aosedge/aos_common/utils/cryptutils"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -34,8 +34,8 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/aoscloud/aos_messageproxy/config"
-	"github.com/aoscloud/aos_messageproxy/iamclient"
+	"github.com/aosedge/aos_messageproxy/config"
+	"github.com/aosedge/aos_messageproxy/iamclient"
 )
 
 /***********************************************************************************************************************

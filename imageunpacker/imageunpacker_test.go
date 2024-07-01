@@ -27,11 +27,11 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/aoscloud/aos_messageproxy/config"
-	"github.com/aoscloud/aos_messageproxy/imageunpacker"
+	"github.com/aosedge/aos_messageproxy/config"
+	"github.com/aosedge/aos_messageproxy/imageunpacker"
 
-	"github.com/aoscloud/aos_common/aoserrors"
-	"github.com/aoscloud/aos_common/utils/fs"
+	"github.com/aosedge/aos_common/aoserrors"
+	"github.com/aosedge/aos_common/utils/fs"
 	"github.com/opencontainers/go-digest"
 	imagespec "github.com/opencontainers/image-spec/specs-go/v1"
 	log "github.com/sirupsen/logrus"
