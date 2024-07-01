@@ -26,19 +26,19 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/aoscloud/aos_common/aoserrors"
-	"github.com/aoscloud/aos_common/utils/cryptutils"
+	"github.com/aosedge/aos_common/aoserrors"
+	"github.com/aosedge/aos_common/utils/cryptutils"
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/coreos/go-systemd/journal"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/aoscloud/aos_messageproxy/cmclient"
-	"github.com/aoscloud/aos_messageproxy/config"
-	"github.com/aoscloud/aos_messageproxy/downloader"
-	"github.com/aoscloud/aos_messageproxy/iamclient"
-	"github.com/aoscloud/aos_messageproxy/iamserver"
-	"github.com/aoscloud/aos_messageproxy/imageunpacker"
-	"github.com/aoscloud/aos_messageproxy/vchanmanager"
+	"github.com/aosedge/aos_messageproxy/cmclient"
+	"github.com/aosedge/aos_messageproxy/config"
+	"github.com/aosedge/aos_messageproxy/downloader"
+	"github.com/aosedge/aos_messageproxy/iamclient"
+	"github.com/aosedge/aos_messageproxy/iamserver"
+	"github.com/aosedge/aos_messageproxy/imageunpacker"
+	"github.com/aosedge/aos_messageproxy/vchanmanager"
 )
 
 /***********************************************************************************************************************

@@ -25,11 +25,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/aoscloud/aos_messageproxy/config"
-	"github.com/aoscloud/aos_messageproxy/iamclient"
+	"github.com/aosedge/aos_messageproxy/config"
+	"github.com/aosedge/aos_messageproxy/iamclient"
 
-	"github.com/aoscloud/aos_common/aoserrors"
-	pb "github.com/aoscloud/aos_common/api/iamanager/v4"
+	"github.com/aosedge/aos_common/aoserrors"
+	pb "github.com/aosedge/aos_common/api/iamanager/v4"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
